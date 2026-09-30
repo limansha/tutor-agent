@@ -1,0 +1,27 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+requests = "==2.34.2"
+flask = "*"
+python-dotenv = "*"
+pydantic = "*"
+pgvector = "*"
+pypdf = "*"
+psycopg = "*"
+langchain = "*"
+langgraph = "*"
+langchain-openai = "*"
+langchain-postgres = "*"
+langchain-text-splitters = "*"
+langchain-huggingface = "*"
+sentence-transformers = "==5.6.1"
+streamlit = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.12"
+python_full_version = "3.12.14"

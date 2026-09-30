@@ -1,0 +1,26 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/
+.ruff_cache/
+.mypy_cache/
+
+# secrets: all .env variants, keep the template
+.env
+.env.*
+!.env.example
+
+# data / generated (source PDFs live outside the repo, guard anyway)
+logs/
+*.log
+questions_dump/
+*.pdf
+
+# local-only agent notes
+AGENTS.md
+
+.DS_Store
+.idea/
+.vscode/

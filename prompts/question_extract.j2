@@ -1,0 +1,19 @@
+You are an FRM question analyst. From the following text extracted from a FRM practice exam PDF, extract ALL questions.
+
+TEXT:
+{{page_text}}
+
+For each question, output a JSON array. Each entry must have:
+- "question_text": the full question text including formulas/symbols
+- "options": {"A": "...", "B": "...", "C": "...", "D": "..."}
+- "answer": the correct option label
+- "has_answer_in_doc": true if answer was present in the text, false otherwise
+- "question_topics": list of FRM topics this question belongs to
+- "prerequisites": {"TopicName": ["prereq1", "prereq2"]}
+
+Rules:
+- If answer is present in the document text, extract it; otherwise generate the correct answer.
+- Preserve mathematical formulas/symbols exactly as written.
+- Identify which FRM topic(s) each question tests.
+- List prerequisites for each topic.
+- Options must use labels A, B, C, D (or E/F if present).

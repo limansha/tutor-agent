@@ -1,0 +1,12 @@
+.git
+.env
+.env.*
+__pycache__
+*.pyc
+.venv
+logs
+questions_dump
+Pipfile
+Pipfile.lock
+makefile
+AGENTS.md
