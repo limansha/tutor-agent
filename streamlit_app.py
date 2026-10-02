@@ -1,7 +1,7 @@
 """Streamlit UI: topic-scoped practice questions with on-demand MCQ answers.
 
 Talks to the Flask API (POST /api/questions, POST /api/mcq-answer).
-Run: make ui  (backend must be up first: make up)
+Run: make ui  (backend must be running first: make run)
 """
 
 from __future__ import annotations

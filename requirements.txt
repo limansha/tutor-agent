@@ -41,7 +41,6 @@ langchain-huggingface==1.2.2; python_full_version >= '3.10.0' and python_full_ve
 langchain-openai==1.6.1; python_full_version >= '3.10.0' and python_full_version < '4.0.0'
 langchain-postgres==0.0.17; python_version >= '3.9'
 langchain-protocol==0.0.19; python_full_version >= '3.10.0' and python_full_version < '4.0.0'
-langchain-text-splitters==1.1.2; python_full_version >= '3.10.0' and python_full_version < '4.0.0'
 langgraph==1.2.11; python_version >= '3.10'
 langgraph-checkpoint==4.2.0; python_version >= '3.10'
 langgraph-prebuilt==1.1.0; python_version >= '3.10'

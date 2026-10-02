@@ -12,6 +12,9 @@ For each question, output a JSON array. Each entry must have:
 - "prerequisites": {"TopicName": ["prereq1", "prereq2"]}
 
 Rules:
+- Output "question_text" and every option as clean, human-readable prose: single spaces between words, proper sentence breaks, no words glued together.
+- The source text may have lost word spacing (PDF extraction) or use column padding — restore the spaces rather than copying it verbatim.
+- Render tables as markdown rows, one per line: `| Asset | Annual Volatility | Value |` then `| A | 20% | $200 |`. Keep them inside "question_text".
 - If answer is present in the document text, extract it; otherwise generate the correct answer.
 - Preserve mathematical formulas/symbols exactly as written.
 - Identify which FRM topic(s) each question tests.

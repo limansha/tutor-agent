@@ -12,17 +12,7 @@ FORCE_REINGEST ?=
 TOPICS ?= ["Futures and Forwards", "Credit Risk", "Option Pricing"]
 PAGE_SIZE ?= 10
 -include .env
-.PHONY: env deps s r db-setup reset ingest ingest-questions ingest-questions-store run stop up restart chat retrieve questions health mcq-answer ui ui-up ui-stop
-
-# Copy .env.example -> .env (never overwrite an existing .env)
-env:
-	@test -f .env || cp .env.example .env
-	@echo ".env ready (edit it and set DATABASE_URL / OPENROUTER_API_KEY)"
-
-# Install Python dependencies via pipenv
-
-deps:
-	pipenv install --verbose
+.PHONY: env deps db-setup reset ingest ingest-questions ingest-questions-store run stop mcq-answer retrieve questions health ui
 
 s:
 	pipenv shell
@@ -31,6 +21,15 @@ r:
 	pipenv install --verbose
 	pipenv lock
 	pipenv requirements > requirements.txt
+
+# Copy .env.example -> .env (never overwrite an existing .env)
+env:
+	@test -f .env || cp .env.example .env
+	@echo ".env ready (edit it and set DATABASE_URL / OPENROUTER_API_KEY)"
+
+# Install Python dependencies via pipenv
+deps:
+	pipenv install --verbose
 
 # Create the pgvector schema (frm_books table + HNSW index) using DATABASE_URL
 db-setup:
@@ -61,21 +60,11 @@ stop:
 	@pkill -f "[r]un\.py" || echo "no server running"
 	@sleep 1
 
-# Start the Flask server in the background (detached, survives shell exit)
-up:
-	@setsid nohup pipenv run python run.py > /tmp/opencode/flask.log 2>&1 < /dev/null & disown
-	@sleep 4
-	@echo "server up -> http://127.0.0.1:5000 (log: /tmp/opencode/flask.log)"
-
-# Stop then start the server in the background
-restart: stop up
-
 # Agentic MCQ chat against a running server (override QUESTION="..." OPTIONS='{"A":"...","B":"..."}')
 mcq-answer:
-	@printf '{"question":"%s","options":%s}' "$(QUESTION)" '$(OPTIONS)' > /tmp/opencode/chat_payload.json
 	@curl -s -X POST http://127.0.0.1:5000/api/mcq-answer \
 		-H 'Content-Type: application/json' \
-		--data @/tmp/opencode/chat_payload.json | pipenv run python -m json.tool
+		-d '{"question": "$(QUESTION)", "options": $(OPTIONS)}' | pipenv run python -m json.tool
 
 # RAG chunk retrieval against a running server (override: QUERY="...")
 retrieve:
@@ -85,26 +74,15 @@ retrieve:
 
 # Topic-scoped questions against a running server (override: TOPICS='["Futures","VaR"]' PAGE_SIZE=15)
 questions:
-	@printf '{"topics": %s, "page_size": %s}' '$(TOPICS)' '$(PAGE_SIZE)' > /tmp/opencode/questions_payload.json
 	@curl -s -X POST http://127.0.0.1:5000/api/questions \
 		-H 'Content-Type: application/json' \
-		--data @/tmp/opencode/questions_payload.json | pipenv run python -m json.tool
+		-d '{"topics": $(TOPICS), "page_size": $(PAGE_SIZE)}' | pipenv run python -m json.tool
 
 # Readiness check
 health:
 	curl -s http://127.0.0.1:5000/api/health | pipenv run python -m json.tool
 
-# Streamlit UI (backend must already be up via `make up`)
+# Streamlit UI (backend must already be running via `make run`)
 ui:
 	pipenv run streamlit run streamlit_app.py
-
-# Start the Streamlit UI in the background (detached, survives shell exit)
-ui-up:
-	@setsid nohup pipenv run streamlit run streamlit_app.py > /tmp/opencode/streamlit.log 2>&1 < /dev/null & disown
-	@sleep 4
-	@echo "ui up -> http://127.0.0.1:8501 (log: /tmp/opencode/streamlit.log)"
-
-# Stop the running Streamlit UI
-ui-stop:
-	@pkill -f "[s]treamlit" || echo "no streamlit running"
 

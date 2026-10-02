@@ -81,8 +81,8 @@ make mcq-answer QUESTION="..." OPTIONS='{"A":"...","B":"..."}'
 make questions TOPICS='["Credit Risk","VaR"]' PAGE_SIZE=10
 ```
 
-A Streamlit UI is included: `make up` (backend, detached) then `make ui`
-→ http://127.0.0.1:8501. `make ui-up` / `make ui-stop` to run it detached.
+A Streamlit UI is included: run `make run` (backend, in another terminal), then `make ui`
+→ http://127.0.0.1:8501.
 
 Re-ingesting: `make reset && make ingest`, or `make ingest FORCE_REINGEST=--force`.
 

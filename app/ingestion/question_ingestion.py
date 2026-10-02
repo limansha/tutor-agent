@@ -18,54 +18,21 @@ from app.config import config
 from app.embeddings import embed_documents
 from app.llm import get_llm, with_llm_fallback
 from app.prompts import render
-from langchain_text_splitters import MarkdownHeaderTextSplitter
 from pypdf import PdfReader
 
 logger = logging.getLogger(__name__)
 
-_question_splitter = MarkdownHeaderTextSplitter(
-    headers_to_split_on=[("#", "question")],
-)
+_PADDING = re.compile(r"[ \t ]{2,}")
 
-def _text_to_markdown(text: str) -> str:
-    """Convert extracted PDF text to markdown with numbered # Question headers.
 
-    Each question block starts at a Q.N line and ends at a horizontal-line
-    marker (--- / ===) or the next Q.M start, whichever comes first.
+def _clean_text(text: str) -> str:
+    """Flatten layout-mode column padding so the LLM sees normal prose.
+
+    layout extraction pads columns with tabs/spaces; normalizing them keeps the
+    prompt readable. Do NOT run this through MarkdownHeaderTextSplitter — it
+    strips whitespace entirely ("JohnWick,FRM,manages...").
     """
-    lines = text.split("\n")
-    markdown_lines: list[str] = []
-    q_num = 0
-    in_question = False
-
-    for line in lines:
-        stripped = line.strip()
-        if _is_question_start(stripped):
-            in_question = False          # close previous question
-            q_num += 1
-            markdown_lines.append(f"# Question {q_num}")
-            in_question = True
-            markdown_lines.append(line)
-        elif _is_horizontal_line(stripped) and in_question:
-            in_question = False
-            markdown_lines.append("")
-        elif in_question:
-            markdown_lines.append(line)
-
-    return "\n".join(markdown_lines)
-
-
-def _is_question_start(line: str) -> bool:
-    """Heuristic to detect the start of a question in extracted PDF text.
-
-    Matches 'Q.1', 'Q 1', 'Q1' etc.
-    """
-    return bool(re.match(r"^Q[.\s]*\d+", line, re.IGNORECASE))
-
-
-def _is_horizontal_line(line: str) -> bool:
-    """Detect question-end markers like '---' or '===' in extracted PDF text."""
-    return bool(re.match(r"^[-=]{3,}$", line.strip()))
+    return _PADDING.sub(" ", text.replace("\t", " ")).strip()
 
 
 def _extract_questions(pdf_path: Path) -> list[dict]:
@@ -75,23 +42,15 @@ def _extract_questions(pdf_path: Path) -> list[dict]:
     logger.info(f"  Pages: {len(reader.pages)}")
 
     for page_num, page in enumerate(reader.pages, start=1):
-        text = page.extract_text(extraction_mode="layout") or ""
+        text = _clean_text(page.extract_text(extraction_mode="layout") or "")
 
-        if not text.strip():
+        if not text:
             logger.debug(f"  Page {page_num}: empty text, skipping")
             continue
 
-        markdown_text = _text_to_markdown(text)
-        chunks = _question_splitter.split_text(markdown_text)
-        if not chunks:
-            logger.warning(f"  Page {page_num}: text extracted ({len(text)} chars) but 0 chunks produced")
-            continue
-
-        logger.info(f"  Page {page_num}: {len(text)} chars → {len(chunks)} chunk(s)")
-        prompt = render(
-            "question_extract.j2",
-            page_text="\n".join(c.page_content for c in chunks),
-        )
+        question_count = len(re.findall(r"^Q[.\s]*\d+", text, re.MULTILINE))
+        logger.info(f"  Page {page_num}: {len(text)} chars, ~{question_count} question(s)")
+        prompt = render("question_extract.j2", page_text=text)
         response = with_llm_fallback(
             lambda model: get_llm(model).invoke([{"role": "user", "content": prompt}])
         )
