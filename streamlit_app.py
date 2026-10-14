@@ -32,10 +32,15 @@ def call(path: str, *, timeout: int = 180, **payload) -> dict:
 def render_question(q: dict) -> None:
     qid = q["qid"]
     with st.expander(q["question_text"], expanded=True):
-        for label, text in q["options"].items():
-            st.markdown(f"**{label}.** {text}")
+        st.radio(
+            "Choose an option",
+            options=list(q["options"].keys()),
+            format_func=lambda label: f"{label}. {q['options'][label]}",
+            key=f"choice_{qid}",
+            label_visibility="collapsed",
+        )
 
-        if st.button("Answer", key=f"ans_{qid}", use_container_width=True):
+        if st.button("Explain Answer", key=f"ans_{qid}", use_container_width=True):
             with st.spinner("Retrieving notes and answering..."):
                 try:
                     st.session_state.answers[qid] = call(
