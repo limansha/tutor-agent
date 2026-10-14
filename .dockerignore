@@ -6,6 +6,9 @@ __pycache__
 .venv
 logs
 questions_dump
+books
+questions
+*.pdf
 Pipfile
 Pipfile.lock
 makefile

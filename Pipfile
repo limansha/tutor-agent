@@ -15,8 +15,7 @@ langchain = "*"
 langgraph = "*"
 langchain-openai = "*"
 langchain-postgres = "*"
-langchain-huggingface = "*"
-sentence-transformers = "==5.6.1"
+fastembed = "*"
 streamlit = "*"
 
 [dev-packages]

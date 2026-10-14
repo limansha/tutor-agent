@@ -34,6 +34,7 @@ class Config:
         "EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"
     ).strip()
     EMBEDDING_DIM: int = int(os.getenv("EMBEDDING_DIM", "384"))
+    EMBEDDING_CACHE_DIR: str = os.getenv("EMBEDDING_CACHE_DIR", "").strip()
 
     BOOKS_DIR: str = os.getenv("BOOKS_DIR", "").strip()
     QUESTIONS_DIR: str | None = os.getenv("QUESTIONS_DIR")

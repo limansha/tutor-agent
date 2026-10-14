@@ -27,9 +27,6 @@ env:
 	@test -f .env || cp .env.example .env
 	@echo ".env ready (edit it and set DATABASE_URL / OPENROUTER_API_KEY)"
 
-# Install Python dependencies via pipenv
-deps:
-	pipenv install --verbose
 
 # Create the pgvector schema (frm_books table + HNSW index) using DATABASE_URL
 db-setup:

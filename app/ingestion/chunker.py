@@ -4,8 +4,8 @@ import re
 from dataclasses import dataclass
 
 from app.config import config
+from app.embeddings import count_tokens
 from app.ingestion.parser import Block, ParsedDocument
-from app.tokenize import count_tokens
 
 _ABBREVIATIONS = re.compile(
     r"\b(?:Mr|Ms|Mrs|Dr|St|Jr|Sr|vs|etc|No|Inc|Ltd|i\.e|e\.g)\.", re.IGNORECASE

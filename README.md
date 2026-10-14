@@ -43,8 +43,8 @@ text — so the LLM sees the full section, not a 400-token fragment. Metadata fi
 sibling chunk of the matched module.
 
 **3. Embed.** `sentence-transformers/all-MiniLM-L6-v2` → 384-dim vectors, cosine distance
-(`<=>`). The dimension is baked into `sql/schema.sql`, so changing `EMBEDDING_DIM` means
-changing the schema too.
+(`<=>`), run through **fastembed** (ONNX Runtime, no torch). The dimension is baked into
+`sql/schema.sql`, so changing `EMBEDDING_DIM` means changing the schema too.
 
 **4. Answer.** Two modes:
 - **Retrieve** — pure RAG, no LLM needed. Returns ranked chunks with scores and source links.

@@ -18,6 +18,12 @@ logs/
 questions_dump/
 *.pdf
 
+# docker compose PDF mounts (keep the dirs, ignore their contents)
+books/*
+!books/.gitkeep
+questions/*
+!questions/.gitkeep
+
 # local-only agent notes
 AGENTS.md
 

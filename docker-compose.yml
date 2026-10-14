@@ -1,0 +1,134 @@
+# Full local stack: Postgres+pgvector, one-shot books ingestion, Flask API, Streamlit UI.
+#
+#   put your source PDFs in ./books  (and ./questions for practice-question PDFs)
+#   docker compose up --build
+#
+# First `up`: db initializes from sql/schema.sql, `ingest` embeds the PDFs into
+# pgvector, then `app` (API) and `ui` start. Later `up`s re-run `ingest`, which
+# skips files already ingested (see app/ingestion/books_pipeline.py), so it is cheap.
+# Full reset (drops DB contents):  docker compose down -v
+#
+# Host dirs and ports are overridable in .env (see .env.example). DATABASE_URL from
+# .env is ignored here: compose points every service at the `db` service instead.
+# EMBEDDING_CACHE_DIR is pinned per-container to the image's baked /opt/models — an
+# empty value in .env must not override it, or the offline runtime finds no model.
+
+services:
+  # --- Postgres + pgvector. sql/schema.sql runs once, on the first boot of an
+  # --- empty data dir, creating the vector extension and both tables.
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-tutor}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+      POSTGRES_DB: ${POSTGRES_DB:-frm_rag}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tutor} -d ${POSTGRES_DB:-frm_rag}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # --- One-shot: parse -> chunk -> embed -> store the ./books PDFs, then exit.
+  # --- No LLM needed. Safe to re-run; existing source_paths are skipped.
+  ingest:
+    build: .
+    image: tutor-agent:local
+    command: ["python", "scripts/ingest.py"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tutor}:${POSTGRES_PASSWORD:-secret}@db:5432/${POSTGRES_DB:-frm_rag}
+      BOOKS_DIR: /books
+      QUESTIONS_DIR: /questions
+      EMBEDDING_CACHE_DIR: /opt/models
+    volumes:
+      - ${BOOKS_HOST_DIR:-./books}:/books:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+    healthcheck:
+      disable: true
+
+  # --- Flask API (gunicorn, as baked into the image). Waits for ingestion so the
+  # --- API never serves an empty corpus. BOOKS_DIR is mounted read-only too, for
+  # --- GET /docs/<file> source links.
+  app:
+    build: .
+    image: tutor-agent:local
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tutor}:${POSTGRES_PASSWORD:-secret}@db:5432/${POSTGRES_DB:-frm_rag}
+      BOOKS_DIR: /books
+      QUESTIONS_DIR: /questions
+      HOST: 0.0.0.0
+      EMBEDDING_CACHE_DIR: /opt/models
+    volumes:
+      - ${BOOKS_HOST_DIR:-./books}:/books:ro
+    ports:
+      - "${APP_PORT:-5000}:5000"
+    depends_on:
+      db:
+        condition: service_healthy
+      ingest:
+        condition: service_completed_successfully
+
+  # --- Streamlit UI, same image (streamlit is a dependency), command overridden.
+  # --- Talks to the API over the compose network.
+  ui:
+    build: .
+    image: tutor-agent:local
+    command: ["streamlit", "run", "streamlit_app.py", "--server.address", "0.0.0.0", "--server.port", "8501"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      API_BASE_URL: http://app:5000
+    ports:
+      - "${UI_PORT:-8501}:8501"
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8501/_stcore/health', timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # --- Optional: extract practice questions via the LLM and store them. Needs
+  # --- OPENROUTER_API_KEY. Off by default; run with:
+  # ---   docker compose --profile questions run --rm questions
+  questions:
+    build: .
+    image: tutor-agent:local
+    profiles: ["questions"]
+    command: ["sh", "-c", "python scripts/ingest_questions.py && python scripts/ingest_questions.py --phase store"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tutor}:${POSTGRES_PASSWORD:-secret}@db:5432/${POSTGRES_DB:-frm_rag}
+      QUESTIONS_DIR: /questions
+      BOOKS_DIR: /books
+      EMBEDDING_CACHE_DIR: /opt/models
+    volumes:
+      - ${BOOKS_HOST_DIR:-./books}:/books:ro
+      - ${QUESTIONS_HOST_DIR:-./questions}:/questions:ro
+      - ./questions_dump:/app/questions_dump
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+
+volumes:
+  pgdata:
