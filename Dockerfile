@@ -43,8 +43,11 @@ EXPOSE 5000
 
 # $PORT: Render injects PORT=10000 and waits on it; locally it falls back to 5000.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
-    CMD python -c "import os, urllib.request as u; u.urlopen('http://127.0.0.1:%s/api/health' % os.environ.get('PORT', '5000'), timeout=4)" || exit 1
+    CMD python -c "import os, urllib.request as u; p=os.environ.get('PORT','5000'); h='/_stcore/health' if os.environ.get('RUN_UI')=='1' else '/api/health'; u.urlopen('http://127.0.0.1:%s%s' % (p, h), timeout=4)" || exit 1
 
-# ponytail: 1 worker x 4 threads: the ~90MB embedding model is loaded per worker. Raise --workers
-# and add RAM per worker, or move embeddings to a separate service, when traffic justifies it.
-CMD sh -c 'gunicorn -k gthread -w 1 --threads 4 -b 0.0.0.0:${PORT:-5000} run:app'
+# ponytail: one image, two roles — RUN_UI=1 runs Streamlit, else gunicorn serves the
+# API. (Compose overrides `command:` per service, so this only matters for Render /
+# bare `docker run`.) 1 worker x 4 threads: the ~90MB embedding model is loaded per
+# worker. Raise --workers and add RAM per worker, or move embeddings to a separate
+# service, when traffic justifies it.
+CMD sh -c 'if [ "$RUN_UI" = "1" ]; then exec streamlit run streamlit_app.py --server.address 0.0.0.0 --server.port "${PORT:-8501}" --server.headless true; else exec gunicorn -k gthread -w 1 --threads 4 -b 0.0.0.0:${PORT:-5000} run:app; fi'

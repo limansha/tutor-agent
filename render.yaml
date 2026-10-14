@@ -61,15 +61,18 @@ services:
       - key: WEB_SEARCH_PROVIDER
         value: duckduckgo
 
-  # Streamlit UI — same image, command overridden. API_BASE_URL is Render's public
-  # URL for the API, copied across so renaming the service updates it automatically.
+  # Streamlit UI — same image; RUN_UI=1 makes the image's CMD run Streamlit instead
+  # of gunicorn (passing a nested `sh -c '...'` as dockerCommand breaks Render's
+  # command handling). API_BASE_URL is Render's public URL for the API, copied
+  # across so renaming the service updates it automatically.
   - type: web
     runtime: docker
     name: tutor-agent-ui
     plan: free
-    dockerCommand: sh -c 'streamlit run streamlit_app.py --server.address 0.0.0.0 --server.port "$PORT" --server.headless true'
     healthCheckPath: /_stcore/health
     envVars:
+      - key: RUN_UI
+        value: "1"
       - key: API_BASE_URL
         fromService:
           name: tutor-agent-api
