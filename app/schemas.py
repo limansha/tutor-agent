@@ -175,7 +175,9 @@ class QuestionsResponse(BaseModel):
 # ---------------------------------------------------------------------------
 class AnswerCheckItem(BaseModel):
     qid: int
-    answer: str = Field(..., min_length=1, description="The option label the user chose.")
+    answer: str | None = Field(
+        default=None, description="The option label the user chose; null if unanswered."
+    )
 
 
 class AnswerCheckRequest(BaseModel):
@@ -187,8 +189,8 @@ class AnswerCheckRequest(BaseModel):
 
 class AnswerCheckResult(BaseModel):
     qid: int
-    chosen_answer: str
-    correct_answer: str
+    chosen_answer: str | None = None
+    correct_answer: str | None = None
     is_correct: bool = False
 
 

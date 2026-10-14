@@ -182,6 +182,14 @@ def _normalize(label: str) -> str:
     return label.strip().upper()
 
 
+def _is_correct(chosen: str | None, correct: str | None) -> bool:
+    return (
+        chosen is not None
+        and correct is not None
+        and _normalize(correct) == _normalize(chosen)
+    )
+
+
 @bp.post("/api/check-answer")
 def check_answer():
     try:
@@ -204,15 +212,17 @@ def check_answer():
             ServiceUnavailable(error=str(exc), hint=db.readiness_hint()).model_dump()
         ), 503
 
-    results = [
-        AnswerCheckResult(
-            qid=item.qid,
-            chosen_answer=item.answer,
-            correct_answer=correct_by_qid[item.qid],
-            is_correct=_normalize(item.answer) == _normalize(correct_by_qid[item.qid]),
+    results = []
+    for item in body.answers:
+        correct = correct_by_qid.get(item.qid)
+        results.append(
+            AnswerCheckResult(
+                qid=item.qid,
+                chosen_answer=item.answer,
+                correct_answer=correct,
+                is_correct=_is_correct(item.answer, correct),
+            )
         )
-        for item in body.answers
-    ]
 
     elapsed_ms = int((time.monotonic() - start) * 1000)
     response = AnswerCheckResponse(

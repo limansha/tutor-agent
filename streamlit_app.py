@@ -41,6 +41,15 @@ def render_question(q: dict) -> None:
             label_visibility="collapsed",
         )
 
+        checked = st.session_state.checks.get(qid)
+        if checked and checked["submitted"] == st.session_state.get(f"choice_{qid}"):
+            if checked["chosen"] is None:
+                st.info(f"**Not answered** — correct answer: {checked['correct_answer']}")
+            elif checked["is_correct"]:
+                st.success("**Correct**")
+            else:
+                st.error(f"**Incorrect** — correct answer: {checked['correct_answer']}")
+
         if st.button("Explain Answer", key=f"ans_{qid}", use_container_width=True):
             with st.spinner("Retrieving notes and answering..."):
                 try:
@@ -105,6 +114,7 @@ def main() -> None:
                 st.session_state.questions = data["questions"]
                 st.session_state.page = 0
                 st.session_state.answers = {}
+                st.session_state.checks = {}
                 if data.get("uncovered_topics"):
                     st.warning(
                         "No questions found for: "
@@ -133,8 +143,32 @@ def main() -> None:
         st.rerun()
 
     st.divider()
-    for q in questions[page * PAGE_SIZE : (page + 1) * PAGE_SIZE]:
+    page_qs = questions[page * PAGE_SIZE : (page + 1) * PAGE_SIZE]
+    for q in page_qs:
         render_question(q)
+
+    if st.button("Check Answers", type="primary", use_container_width=True):
+        payload = [
+            {"qid": q["qid"], "answer": st.session_state.get(f"choice_{q['qid']}")}
+            for q in page_qs
+        ]
+        try:
+            data = call("/api/check-answer", answers=payload)
+        except Exception as exc:
+            st.error(f"Failed to check answers: {exc}")
+        else:
+            st.session_state.checks.update(
+                {
+                    r["qid"]: {
+                        "submitted": st.session_state.get(f"choice_{r['qid']}"),
+                        "chosen": r["chosen_answer"],
+                        "is_correct": r["is_correct"],
+                        "correct_answer": r["correct_answer"],
+                    }
+                    for r in data["results"]
+                }
+            )
+            st.rerun()
 
 
 if __name__ == "__main__":
