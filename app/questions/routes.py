@@ -17,6 +17,9 @@ from app import db
 from app.config import config
 from app.embeddings import embed_documents
 from app.schemas import (
+    AnswerCheckRequest,
+    AnswerCheckResponse,
+    AnswerCheckResult,
     QuestionsRequest,
     QuestionsResponse,
     ServiceUnavailable,
@@ -170,6 +173,52 @@ def questions():
         total=len(selected),
         uncovered_topics=[UncoveredTopic(topic=t) for t in uncovered],
         questions=selected,
+        elapsed_ms=elapsed_ms,
+    )
+    return jsonify(response.model_dump()), 200
+
+
+def _normalize(label: str) -> str:
+    return label.strip().upper()
+
+
+@bp.post("/api/check-answer")
+def check_answer():
+    try:
+        body = AnswerCheckRequest.model_validate(request.get_json(force=True))
+    except ValidationError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    qids = [item.qid for item in body.answers]
+    try:
+        start = time.monotonic()
+        with db.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT qid, answer FROM frm_questions WHERE qid = ANY(%s)",
+                    (qids,),
+                )
+                correct_by_qid = {qid: ans for qid, ans in cur.fetchall()}
+    except db.DatabaseNotReady as exc:
+        return jsonify(
+            ServiceUnavailable(error=str(exc), hint=db.readiness_hint()).model_dump()
+        ), 503
+
+    results = [
+        AnswerCheckResult(
+            qid=item.qid,
+            chosen_answer=item.answer,
+            correct_answer=correct_by_qid[item.qid],
+            is_correct=_normalize(item.answer) == _normalize(correct_by_qid[item.qid]),
+        )
+        for item in body.answers
+    ]
+
+    elapsed_ms = int((time.monotonic() - start) * 1000)
+    response = AnswerCheckResponse(
+        results=results,
+        total=len(results),
+        correct=sum(r.is_correct for r in results),
         elapsed_ms=elapsed_ms,
     )
     return jsonify(response.model_dump()), 200

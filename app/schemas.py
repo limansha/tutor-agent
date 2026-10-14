@@ -168,3 +168,32 @@ class QuestionsResponse(BaseModel):
     uncovered_topics: list[UncoveredTopic]
     questions: list[Question]
     elapsed_ms: int
+
+
+# ---------------------------------------------------------------------------
+# Check answer (deterministic validation against frm_questions.answer)
+# ---------------------------------------------------------------------------
+class AnswerCheckItem(BaseModel):
+    qid: int
+    answer: str = Field(..., min_length=1, description="The option label the user chose.")
+
+
+class AnswerCheckRequest(BaseModel):
+    answers: list[AnswerCheckItem] = Field(
+        ..., min_length=1, max_length=100,
+        description="One entry per question to validate.",
+    )
+
+
+class AnswerCheckResult(BaseModel):
+    qid: int
+    chosen_answer: str
+    correct_answer: str
+    is_correct: bool = False
+
+
+class AnswerCheckResponse(BaseModel):
+    results: list[AnswerCheckResult]
+    total: int
+    correct: int
+    elapsed_ms: int
