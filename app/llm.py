@@ -13,11 +13,13 @@ import time
 from typing import Any, Callable
 
 from langchain_openai import ChatOpenAI
-from openai import APIError
+from openai import APIError, OpenAI
 
 from app.config import config
 
 logger = logging.getLogger(__name__)
+
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 _402_RETRIES = 2  # in-flight budget is account-wide; retry same model, not a fallback
 
@@ -46,8 +48,21 @@ def get_llm(model: str | None = None) -> ChatOpenAI:
         temperature=config.OPENROUTER_TEMPERATURE,
         max_tokens=config.OPENROUTER_MAX_TOKENS,
         api_key=config.OPENROUTER_API_KEY,
-        base_url="https://openrouter.ai/api/v1",
+        base_url=OPENROUTER_BASE_URL,
     )
+
+
+def get_openai_client() -> OpenAI:
+    """Raw OpenRouter client, for calls where ChatOpenAI would drop fields we need.
+
+    ChatOpenAI's chat-completions converter discards the top-level `annotations`
+    list OpenRouter returns for web-search citations, so web mode reads them here.
+    """
+    if not config.OPENROUTER_API_KEY:
+        raise RuntimeError(
+            "OPENROUTER_API_KEY is not set. Add it to .env to use /api/mcq-answer."
+        )
+    return OpenAI(base_url=OPENROUTER_BASE_URL, api_key=config.OPENROUTER_API_KEY)
 
 
 def model_chain() -> list[str]:

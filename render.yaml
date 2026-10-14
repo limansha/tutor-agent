@@ -1,0 +1,83 @@
+# Render Blueprint: https://render.com/docs/infrastructure-as-code
+# Sync once from the Render dashboard (Blueprints -> New Blueprint -> this repo/branch).
+# `render blueprints validate` checks it locally if you have the Render CLI.
+#
+# Chosen plan: FREE. What that means:
+#   * both web services sleep after ~15 min idle (~1 min cold start) and share the
+#     workspace's 750 instance-hours/month,
+#   * the Postgres instance EXPIRES 30 DAYS AFTER CREATION (then deleted 14 days
+#     later, no backups) — re-run the steps below around day 25, or upgrade the DB,
+#   * no persistent disk, so GET /docs/<file> 404s (answers/citations unaffected).
+#
+# The data load is one-time and runs from THIS repo's directory, against the
+# database's *external* connection string (Render dashboard -> DB -> Connections).
+# The fromDatabase wiring below hands the services Render's internal hostname,
+# which only resolves inside Render's network, so a local machine must use the
+# external one:
+#
+#   DATABASE_URL=<external> make db-setup                 # ONCE: creates the tables
+#   DATABASE_URL=<external> make ingest                   # ./books PDFs -> vectors
+#   DATABASE_URL=<external> make ingest-questions         # LLM -> questions_dump/*.json
+#   DATABASE_URL=<external> make ingest-questions-store   # JSON -> frm_questions
+#
+# Ingest runs locally on purpose: the licensed PDFs are not committed, so they
+# never reach Render's build context — only rows land in Postgres. Never re-run
+# `make db-setup` after loading data: it re-drops frm_questions. Reload it for free
+# with `make ingest-questions-store` (reads the local questions_dump/*.json).
+
+services:
+  # Flask API — served by the image's CMD, which binds 0.0.0.0:$PORT.
+  - type: web
+    runtime: docker
+    name: tutor-agent-api
+    plan: free
+    healthCheckPath: /api/health
+    # Free web services cannot attach a disk (and no other service can read one
+    # anyway), so GET /docs/<file> 404s — answers/citations still work, only the
+    # PDF links die. To restore them on a paid plan, add a `disk:` block here with
+    # mountPath /books and drop the PDFs in via the Render shell.
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: tutor-agent-db
+          property: connectionString
+      # Prompted at sync time; required for /api/mcq-answer (retrieval works without).
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: BOOKS_DIR
+        value: /books
+      - key: QUESTIONS_DIR
+        value: /books
+      # Hosted corpus is questions-only, so /api/mcq-answer uses web search instead
+      # of frm_books (unset = books mode).
+      - key: ANSWER_MODE
+        value: web
+      # Free-tier path: keyless DDG search (WEB_SEARCH_PROVIDER=duckduckgo) with a
+      # free OpenRouter model, so no purchased credits are needed. Swap to the paid
+      # slugs once credits exist (OPENROUTER_MODEL=openai/gpt-oss-20b,
+      # WEB_SEARCH_PROVIDER=openrouter).
+      - key: OPENROUTER_MODEL
+        value: nvidia/nemotron-3-super-120b-a12b:free
+      - key: WEB_SEARCH_PROVIDER
+        value: duckduckgo
+
+  # Streamlit UI — same image, command overridden. API_BASE_URL is Render's public
+  # URL for the API, copied across so renaming the service updates it automatically.
+  - type: web
+    runtime: docker
+    name: tutor-agent-ui
+    plan: free
+    dockerCommand: sh -c 'streamlit run streamlit_app.py --server.address 0.0.0.0 --server.port "$PORT" --server.headless true'
+    healthCheckPath: /_stcore/health
+    envVars:
+      - key: API_BASE_URL
+        fromService:
+          name: tutor-agent-api
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+
+databases:
+  # PG 13+ needed for `CREATE EXTENSION vector` (sql/schema.sql runs it in db-setup).
+  - name: tutor-agent-db
+    plan: free
+    postgresMajorVersion: "16"
