@@ -13,17 +13,17 @@
 # database's *external* connection string (Render dashboard -> DB -> Connections).
 # The fromDatabase wiring below hands the services Render's internal hostname,
 # which only resolves inside Render's network, so a local machine must use the
-# external one:
+# external one.
 #
-#   DATABASE_URL=<external> make db-setup                 # ONCE: creates the tables
-#   DATABASE_URL=<external> make ingest                   # ./books PDFs -> vectors
-#   DATABASE_URL=<external> make ingest-questions         # LLM -> questions_dump/*.json
-#   DATABASE_URL=<external> make ingest-questions-store   # JSON -> frm_questions
+# IMPORTANT: prefix with PIPENV_DONT_LOAD_ENV=1. Both the makefile (`-include .env`)
+# and pipenv (`pipenv run`, which loads .env) otherwise override DATABASE_URL with
+# the LOCAL value in .env, so the load silently hits your local DB instead of Render.
 #
-# Ingest runs locally on purpose: the licensed PDFs are not committed, so they
-# never reach Render's build context — only rows land in Postgres. Never re-run
-# `make db-setup` after loading data: it re-drops frm_questions. Reload it for free
-# with `make ingest-questions-store` (reads the local questions_dump/*.json).
+#   PIPENV_DONT_LOAD_ENV=1 make db-setup               DATABASE_URL=<external>
+#   PIPENV_DONT_LOAD_ENV=1 make ingest-questions-store DATABASE_URL=<external>
+#
+# (Skip `make ingest` — no books — and `make ingest-questions`, the JSON is already
+# extracted. `make db-setup` re-drops frm_questions, so always run the store step after.)
 
 services:
   # Flask API — served by the image's CMD, which binds 0.0.0.0:$PORT.
