@@ -130,9 +130,13 @@ class ServiceUnavailable(BaseModel):
 # Questions (fetch by requested topics with exact-first/semantic-fallback)
 # ---------------------------------------------------------------------------
 class QuestionsRequest(BaseModel):
-    topics: list[str] = Field(..., min_length=1, description="Topics to fetch questions for.")
-    page_size: int = Field(default=10, ge=1, le=50,
-                           description="Max questions returned; at least one per matched topic.")
+    topics: list[str] = Field(
+        default_factory=list,
+        description="Topics to fetch questions for; empty = every question in the DB.",
+    )
+    page: int = Field(default=1, ge=1, description="1-based page number.")
+    page_size: int = Field(default=100, ge=1, le=100,
+                           description="Questions per page (max 100).")
 
 
 class Question(BaseModel):
@@ -164,7 +168,10 @@ class UncoveredTopic(BaseModel):
 
 class QuestionsResponse(BaseModel):
     topics: list[TopicMatch]
+    page: int = 1
+    page_size: int = 100
     total: int
+    has_more: bool = False
     uncovered_topics: list[UncoveredTopic]
     questions: list[Question]
     elapsed_ms: int

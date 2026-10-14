@@ -49,6 +49,15 @@ _SEMANTIC_SQL = f"""
     LIMIT %s
 """
 
+_ALL_SQL = f"""
+    SELECT {", ".join(_Q_COLS)}
+    FROM frm_questions
+    ORDER BY qid
+    LIMIT %s OFFSET %s
+"""
+
+_COUNT_SQL = "SELECT count(*) FROM frm_questions"
+
 
 def _emb_sql(vec: list[float]) -> str:
     return f"[{','.join(f'{x:.6f}' for x in vec)}]"
@@ -141,11 +150,23 @@ def questions():
     except ValidationError as exc:
         return jsonify({"error": str(exc)}), 400
 
+    offset = (body.page - 1) * body.page_size
     try:
         start = time.monotonic()
         with db.connect() as conn:
             with conn.cursor() as cur:
-                pools, match_type, uncovered = _match_questions(cur, body.topics, body.page_size)
+                if body.topics:
+                    pools, match_type, uncovered = _match_questions(
+                        cur, body.topics, body.page_size
+                    )
+                    all_mode = False
+                else:  # no topics = every question in the DB, SQL-paginated
+                    cur.execute(_COUNT_SQL)
+                    total = cur.fetchone()[0]
+                    cur.execute(_ALL_SQL, (body.page_size, offset))
+                    selected = [dict(zip(_Q_COLS, row)) for row in cur.fetchall()]
+                    match_type, uncovered = {}, []
+                    all_mode = True
     except db.DatabaseNotReady as exc:
         return jsonify(
             ServiceUnavailable(error=str(exc), hint=db.readiness_hint()).model_dump()
@@ -158,10 +179,15 @@ def questions():
             ).model_dump()
         ), 503
 
-    try:
-        selected = _allocate(pools, body.page_size)
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
+    if not all_mode:
+        try:
+            selected = _allocate(pools, body.page_size)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        total = len(selected)
+        has_more = False
+    else:
+        has_more = offset + len(selected) < total
 
     elapsed_ms = int((time.monotonic() - start) * 1000)
     response = QuestionsResponse(
@@ -170,7 +196,10 @@ def questions():
             for t in body.topics
             if t in match_type
         ],
-        total=len(selected),
+        page=body.page,
+        page_size=body.page_size,
+        total=total,
+        has_more=has_more,
         uncovered_topics=[UncoveredTopic(topic=t) for t in uncovered],
         questions=selected,
         elapsed_ms=elapsed_ms,

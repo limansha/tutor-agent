@@ -1,6 +1,6 @@
 """Streamlit UI: topic-scoped practice questions with on-demand MCQ answers.
 
-Talks to the Flask API (POST /api/questions, POST /api/mcq-answer).
+Talks to the Flask API (POST /api/questions, POST /api/mcq-answer, POST /api/check-answer).
 Run: make ui  (backend must be running first: make run)
 """
 
@@ -98,16 +98,23 @@ def main() -> None:
 
     with st.sidebar:
         st.header("Topics")
-        checked = [t for t in TOPICS if st.checkbox(t, key=f"topic_{t}", value=True)]
-        page_size = st.slider("Questions per fetch", min_value=3, max_value=50, value=20)
+        all_topics = st.checkbox("All topics", key="topic_all", value=True)
+        checked = [
+            t
+            for t in TOPICS
+            if st.checkbox(t, key=f"topic_{t}", value=True, disabled=all_topics)
+        ]
+        if all_topics:
+            checked = []
+        page_size = st.slider("Questions per fetch", min_value=3, max_value=100, value=100)
         fetch_btn = st.button("Fetch questions", type="primary", use_container_width=True)
 
     if fetch_btn:
-        if not checked:
+        if not all_topics and not checked:
             st.error("Select at least one topic.")
         else:
             try:
-                data = call("/api/questions", topics=checked, page_size=page_size)
+                data = call("/api/questions", topics=checked, page=1, page_size=page_size)
             except Exception as exc:
                 st.error(f"Failed to fetch questions: {exc}")
             else:
