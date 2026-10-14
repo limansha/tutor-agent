@@ -37,6 +37,7 @@ def render_question(q: dict) -> None:
             options=list(q["options"].keys()),
             format_func=lambda label: f"{label}. {q['options'][label]}",
             key=f"choice_{qid}",
+            index=None,
             label_visibility="collapsed",
         )
 
@@ -85,7 +86,6 @@ def render_question(q: dict) -> None:
 
 def main() -> None:
     st.title("FRM MCQ Practice")
-    st.caption(f"Backend: {API_BASE}")
 
     with st.sidebar:
         st.header("Topics")
