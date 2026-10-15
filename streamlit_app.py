@@ -23,7 +23,10 @@ st.set_page_config(page_title="FRM MCQ Practice", layout="wide")
 
 def call(path: str, *, timeout: int = 180, **payload) -> dict:
     resp = requests.post(f"{API_BASE}{path}", json=payload, timeout=timeout)
-    body = resp.json()
+    try:
+        body = resp.json()
+    except ValueError:
+        raise RuntimeError(f"{resp.status_code} {resp.reason}: {resp.text[:300]}")
     if resp.status_code != 200:
         raise RuntimeError(body.get("error") or body.get("hint") or resp.text)
     return body

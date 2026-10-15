@@ -150,6 +150,13 @@ def questions():
     except ValidationError as exc:
         return jsonify({"error": str(exc)}), 400
 
+    if not db.is_ready():
+        return jsonify(
+            ServiceUnavailable(
+                error="database is not ready", hint=db.readiness_hint()
+            ).model_dump()
+        ), 503
+
     offset = (body.page - 1) * body.page_size
     try:
         start = time.monotonic()
@@ -225,6 +232,13 @@ def check_answer():
         body = AnswerCheckRequest.model_validate(request.get_json(force=True))
     except ValidationError as exc:
         return jsonify({"error": str(exc)}), 400
+
+    if not db.is_ready():
+        return jsonify(
+            ServiceUnavailable(
+                error="database is not ready", hint=db.readiness_hint()
+            ).model_dump()
+        ), 503
 
     qids = [item.qid for item in body.answers]
     try:
