@@ -33,25 +33,6 @@ def count_tokens(text: str) -> int:
     return _get_client().token_count(text)
 
 
-BACKEND = "fastembed/onnxruntime"
-
-
-def status() -> dict:
-    """Embedding backend status for /api/health.
-
-    Loads the model if it is not already loaded (the singleton caches it after
-    the first call), so a missing model or cache reports ready=False instead of
-    taking the whole endpoint down.
-    """
-    ready = _client is not None
-    if not ready:
-        try:
-            _get_client()
-            ready = True
-        except Exception:
-            ready = False
-    return {
-        "backend": BACKEND,
-        "cache_dir": config.EMBEDDING_CACHE_DIR or None,
-        "ready": ready,
-    }
+def is_loaded() -> bool:
+    """Whether the model singleton is already in memory (never loads it)."""
+    return _client is not None

@@ -133,7 +133,7 @@ def main() -> None:
 
     questions = st.session_state.get("questions")
     if questions is None:
-        st.info("Pick topics and click *Fetch questions* to begin.")
+        st.info("Pick topics from right side menu and click *Fetch questions* to begin.")
         return
 
     if not questions:

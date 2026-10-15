@@ -58,7 +58,6 @@ def docs(filename: str):
 @bp.get("/api/health")
 def health():
     ready = db.is_ready()
-    emb = embeddings.status()
     return jsonify(
         {
             "status": "ok" if ready else "degraded",
@@ -67,9 +66,9 @@ def health():
             "openrouter_key_set": bool(config.OPENROUTER_API_KEY),
             "embedding_model": config.EMBEDDING_MODEL,
             "embedding_dim": config.EMBEDDING_DIM,
-            "embedding_backend": emb["backend"],
-            "embedding_cache_dir": emb["cache_dir"],
-            "embeddings_ready": emb["ready"],
+            "embedding_backend": "fastembed/onnxruntime",
+            "embedding_cache_dir": config.EMBEDDING_CACHE_DIR or None,
+            "embeddings_ready": embeddings.is_loaded(),
             "books_dir": config.BOOKS_DIR,
             "hint": None if ready else db.readiness_hint(),
         }
