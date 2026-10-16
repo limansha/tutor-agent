@@ -60,7 +60,7 @@ def is_ready() -> bool:
 
 
 def init_schema() -> None:
-    """Apply sql/schema.sql (pgvector extension, frm_books table, HNSW index)."""
+    """Apply sql/schema.sql (pgvector extension, frm_books + question tables)."""
     if not config.SCHEMA_SQL.exists():
         raise FileNotFoundError(f"schema file missing: {config.SCHEMA_SQL}")
     conn = connect()

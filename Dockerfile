@@ -47,7 +47,10 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
 
 # ponytail: one image, two roles — RUN_UI=1 runs Streamlit, else gunicorn serves the
 # API. (Compose overrides `command:` per service, so this only matters for Render /
-# bare `docker run`.) 1 worker x 4 threads: the ~90MB embedding model is loaded per
-# worker. Raise --workers and add RAM per worker, or move embeddings to a separate
+# bare `docker run`.) 1 worker x 4 threads: the ~90MB embedding model is loaded
+# lazily on the first embed, never at boot — the hosted web-only MCQ path never
+# embeds, so on Render it stays unloaded and foots no RAM. --timeout 120 gives
+# slow requests (first embed, web-search MCQ) room so the worker isn't killed into
+# a 502. Raise --workers and add RAM per worker, or move embeddings to a separate
 # service, when traffic justifies it.
-CMD sh -c 'if [ "$RUN_UI" = "1" ]; then exec streamlit run streamlit_app.py --server.address 0.0.0.0 --server.port "${PORT:-8501}" --server.headless true; else exec gunicorn -k gthread -w 1 --threads 4 -b 0.0.0.0:${PORT:-5000} run:app; fi'
+CMD sh -c 'if [ "$RUN_UI" = "1" ]; then exec streamlit run streamlit_app.py --server.address 0.0.0.0 --server.port "${PORT:-8501}" --server.headless true; else exec gunicorn -k gthread -w 1 --threads 4 --timeout 120 -b 0.0.0.0:${PORT:-5000} run:app; fi'

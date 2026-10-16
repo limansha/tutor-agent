@@ -40,8 +40,8 @@ def insert_chunks(
 ) -> None:
     """Insert parent chunks first (RETURNING id), then children linked by parent_id.
 
-    Parents carry no embedding (embedding=None -> NULL) and are excluded from
-    the HNSW index (partial index WHERE role='child').
+    Parents carry no embedding (embedding=None -> NULL); only children are
+    embedded and matched at query time.
     """
     if not records:
         return

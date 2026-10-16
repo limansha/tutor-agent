@@ -81,13 +81,16 @@ def _extract_questions(pdf_path: Path) -> list[dict]:
     return questions
 
 
+def _dump_path(pdf_name: str, output_dir: str) -> Path:
+    """JSON dump path for a PDF name — also the O(1) skip check in ingest."""
+    return Path(output_dir) / f"questions_{Path(pdf_name).stem}.json"
+
+
 def _dump_questions(questions: list[dict], output_dir: str) -> None:
     if not questions:
         return
-    out_dir = Path(output_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    pdf_name = questions[0].get("pdf_name", "questions")
-    filepath = out_dir / f"questions_{Path(pdf_name).stem}.json"
+    filepath = _dump_path(questions[0].get("pdf_name", "questions"), output_dir)
+    filepath.parent.mkdir(parents=True, exist_ok=True)
     with open(filepath, "w") as f:
         json.dump(questions, f, indent=2)
 
@@ -185,9 +188,13 @@ def ingest_questions(books_dir: str | None = None) -> dict:
     logger.info(f"Found {len(pdf_files)} PDF file(s) to process")
 
     overall_start = time.monotonic()
-    processed = failed = total_questions = 0
+    processed = failed = skipped = total_questions = 0
 
     for pdf_path in pdf_files:
+        if _dump_path(pdf_path.name, config.QUESTIONS_JSON_DIR).exists():
+            skipped += 1
+            logger.info(f"  - {pdf_path.name}: already extracted, skipped")
+            continue
         file_start = time.monotonic()
         logger.info(f"Processing: {pdf_path.name}")
         try:
@@ -209,14 +216,14 @@ def ingest_questions(books_dir: str | None = None) -> dict:
     total_elapsed = time.monotonic() - overall_start
     logger.info("-" * 60)
     logger.info(
-        f"Ingestion complete: {processed} processed, {failed} failed, "
-        f"{total_questions} total questions in {total_elapsed:.1f}s"
+        f"Ingestion complete: {processed} processed, {skipped} skipped, "
+        f"{failed} failed, {total_questions} total questions in {total_elapsed:.1f}s"
     )
     logger.info("=" * 60)
 
     return {
         "status": "ok", "total_files": len(pdf_files),
-        "processed": processed, "failed": failed,
+        "processed": processed, "skipped": skipped, "failed": failed,
         "total_questions": total_questions,
         "total_time_seconds": round(total_elapsed, 1),
         "message": "Questions extracted to JSON. Run `make ingest-questions-store` to store them in the DB.",

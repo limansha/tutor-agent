@@ -1,12 +1,10 @@
-"""Free web search for web-mode MCQ answers (DuckDuckGo Lite, no API key).
+"""Free web search for the agent's `web_search` tool (DuckDuckGo Lite, no key).
 
-This is the free-tier alternative to OpenRouter's paid `web` plugin (which 402s
-without purchased credits). It scrapes the DDG-Lite HTML with only
-`requests` + stdlib `html.parser`; on any failure it returns no results and the
-model falls back to its own knowledge.
+Scrapes the DDG-Lite HTML with only `requests` + stdlib `html.parser`; on any
+failure it returns no results and the model falls back to its own knowledge.
 
-ponytail: best-effort single-page scrape — swap WEB_SEARCH_PROVIDER for a real
-search API if DDG starts blocking or you need reliability.
+ponytail: best-effort single-page scrape — swap in a real search API if DDG
+starts blocking or you need reliability.
 """
 
 from __future__ import annotations

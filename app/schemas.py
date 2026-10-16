@@ -132,11 +132,15 @@ class ServiceUnavailable(BaseModel):
 class QuestionsRequest(BaseModel):
     topics: list[str] = Field(
         default_factory=list,
-        description="Topics to fetch questions for; empty = every question in the DB.",
+        description="Exact topic tags to match against question_topics (GIN).",
     )
-    page: int = Field(default=1, ge=1, description="1-based page number.")
+    search_topics: list[str] = Field(
+        default_factory=list,
+        description="Topics to match semantically; only runs when non-empty.",
+    )
+    page_number: int = Field(default=1, ge=1, description="1-based batch number.")
     page_size: int = Field(default=100, ge=1, le=100,
-                           description="Questions per page (max 100).")
+                           description="Questions per batch (max 100).")
 
 
 class Question(BaseModel):
@@ -168,8 +172,6 @@ class UncoveredTopic(BaseModel):
 
 class QuestionsResponse(BaseModel):
     topics: list[TopicMatch]
-    page: int = 1
-    page_size: int = 100
     total: int
     has_more: bool = False
     uncovered_topics: list[UncoveredTopic]

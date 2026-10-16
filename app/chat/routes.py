@@ -23,13 +23,7 @@ def chat():
         return jsonify({"error": "invalid request", "detail": exc.errors()}), 400
     try:
         start = time.monotonic()
-        answer, sources = answer_mcq(
-            body.question,
-            body.options,
-            filters=body.filters,
-            top_k=body.top_k,
-            parent_expansion=body.parent_expansion,
-        )
+        answer, sources = answer_mcq(body.question, body.options)
     except APIError as exc:
         return jsonify(
             ServiceUnavailable(error=str(exc), hint="OpenRouter provider error; retry shortly.").model_dump()

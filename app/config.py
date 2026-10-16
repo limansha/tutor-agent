@@ -61,16 +61,7 @@ class Config:
 
     TOPIC_MATCH_THRESHOLD: float = float(os.getenv("TOPIC_MATCH_THRESHOLD", "0.7"))
 
-    # --- MCQ answer source toggle (app/agent.py) ---
-    # 'web' (default) = answer from web-search results; 'books' = RAG over
-    # frm_books via the agent tool.
-    ANSWER_MODE: str = os.getenv("ANSWER_MODE", "web").strip().lower()
-    # Web search backend for ANSWER_MODE=web:
-    #   duckduckgo = free, keyless scrape (app/websearch.py) — works on the free tier.
-    #   openrouter = OpenRouter's `web` plugin — richer, but needs purchased credits.
-    WEB_SEARCH_PROVIDER: str = os.getenv(
-        "WEB_SEARCH_PROVIDER", "duckduckgo"
-    ).strip().lower()
+    # --- Web search (app/agent.py `web_search` tool) ---
     WEB_SEARCH_MAX_RESULTS: int = int(os.getenv("WEB_SEARCH_MAX_RESULTS", "3"))
     # Domains to keep out of web-mode results: Q&A sites, forums and answer mills
     # that show the question but not a reliable, official explanation.

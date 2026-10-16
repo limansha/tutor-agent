@@ -117,11 +117,14 @@ def main() -> None:
             st.error("Select at least one topic.")
         else:
             try:
-                data = call("/api/questions", topics=checked, page=1, page_size=page_size)
+                data = call("/api/questions", topics=checked, page_number=1, page_size=page_size)
             except Exception as exc:
                 st.error(f"Failed to fetch questions: {exc}")
             else:
                 st.session_state.questions = data["questions"]
+                st.session_state.server_page = 1
+                st.session_state.has_more = data.get("has_more", False)
+                st.session_state.fetch_topics = checked
                 st.session_state.page = 0
                 st.session_state.answers = {}
                 st.session_state.checks = {}
@@ -156,6 +159,25 @@ def main() -> None:
     page_qs = questions[page * PAGE_SIZE : (page + 1) * PAGE_SIZE]
     for q in page_qs:
         render_question(q)
+
+    if st.session_state.get("has_more") and st.button(
+        "Load next batch", use_container_width=True
+    ):
+        try:
+            with st.spinner("Fetching more questions..."):
+                data = call(
+                    "/api/questions",
+                    topics=st.session_state.get("fetch_topics", []),
+                    page_number=st.session_state.server_page + 1,
+                    page_size=page_size,
+                )
+        except Exception as exc:
+            st.error(f"Failed to fetch more questions: {exc}")
+        else:
+            st.session_state.questions += data["questions"]
+            st.session_state.server_page += 1
+            st.session_state.has_more = data.get("has_more", False)
+            st.rerun()
 
     if st.button("Check Answers", type="primary", use_container_width=True):
         payload = [

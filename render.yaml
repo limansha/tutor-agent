@@ -48,18 +48,11 @@ services:
         value: /books
       - key: QUESTIONS_DIR
         value: /books
-      # Hosted corpus is questions-only, so /api/mcq-answer uses web search instead
-      # of frm_books (unset = books mode).
-      - key: ANSWER_MODE
-        value: web
-      # Free-tier path: keyless DDG search (WEB_SEARCH_PROVIDER=duckduckgo) with a
-      # free OpenRouter model, so no purchased credits are needed. Swap to the paid
-      # slugs once credits exist (OPENROUTER_MODEL=openai/gpt-oss-20b,
-      # WEB_SEARCH_PROVIDER=openrouter).
+      # Hosted corpus is questions-only, so /api/mcq-answer uses the web_search
+      # tool instead of frm_books. Free models keep it on the free tier; swap to
+      # paid slugs once credits exist (OPENROUTER_MODEL=openai/gpt-oss-20b).
       - key: OPENROUTER_MODEL
         value: nvidia/nemotron-3-super-120b-a12b:free
-      - key: WEB_SEARCH_PROVIDER
-        value: duckduckgo
 
   # Streamlit UI — same image; RUN_UI=1 makes the image's CMD run Streamlit instead
   # of gunicorn (passing a nested `sh -c '...'` as dockerCommand breaks Render's

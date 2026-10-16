@@ -1,20 +1,12 @@
-"""Self-check for the web-mode citation -> SourceChunk mapper.
+"""Self-check for the web-search result -> SourceChunk mapper + DDG-Lite parser.
 
 Run:  python test_web_sources.py
-No framework: a few asserts over fake OpenRouter annotation objects.
+No framework: a few asserts over fake search-result dicts and a fake DDG page.
+Requires the app deps (imports app.agent), so run inside the pipenv venv.
 """
 
-from types import SimpleNamespace
-
-from app.agent import _MAX_CITATION_CHARS, _citations_to_sources
+from app.agent import _MAX_SOURCE_CHARS, _result_sources
 from app.websearch import _LiteParser, _excluded, _pair_events, _unwrap
-
-
-def _cite(url, title, content):
-    return SimpleNamespace(
-        url_citation=SimpleNamespace(url=url, title=title, content=content)
-    )
-
 
 _FIXTURE = """
 <table>
@@ -42,23 +34,29 @@ def _test_ddg_parser() -> None:
     assert not _excluded("https://www.bis.org/x", ["quora.com", "reddit.com"])
 
 
-def main() -> None:
-    annotations = [
-        _cite("https://www.garp.org/a", "GARP", "x" * 5000),
-        _cite("https://www.garp.org/a", "duplicate url", "dropped"),
-        SimpleNamespace(url_citation=None),
-        _cite("https://www.bis.org/b", "", ""),
+def _test_result_sources() -> None:
+    seen: set[str] = set()
+    results = [
+        {"url": "https://www.garp.org/a", "title": "GARP", "snippet": "x" * 5000},
+        {"url": "https://www.garp.org/a", "title": "duplicate url", "snippet": "dropped"},
+        {"url": "https://www.bis.org/b", "title": "", "snippet": ""},
     ]
-    out = _citations_to_sources(annotations)
+    out = _result_sources(results, seen)
 
     assert len(out) == 2, out
     assert all(s.role == "web" for s in out)
     assert out[0].metadata.doc_url == "https://www.garp.org/a"
     assert out[0].metadata.reading_title == "GARP"
-    assert len(out[0].text) == _MAX_CITATION_CHARS  # excerpt trimmed
+    assert len(out[0].text) == _MAX_SOURCE_CHARS  # excerpt trimmed
     assert out[1].metadata.reading_title == "https://www.bis.org/b"  # title -> url
-    assert out[1].text == "https://www.bis.org/b"  # content -> url
-    assert _citations_to_sources(None) == []
+    assert out[1].text == "https://www.bis.org/b"  # snippet -> url
+
+    # shared `seen` set de-dupes across separate tool calls
+    assert _result_sources(results, seen) == []
+
+
+def main() -> None:
+    _test_result_sources()
     _test_ddg_parser()
     print("test_web_sources: OK")
 

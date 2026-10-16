@@ -36,11 +36,10 @@ key concepts, formulas). Front matter — welcome, copyright, TOC — is dropped
 | **parent** | a whole module/reading section, normalized to a token budget | no (`NULL`) |
 | **child** | sliding sentence windows within that section | yes |
 
-Only children are embedded and indexed (HNSW is partial, `WHERE role='child'`). At query
-time we match children on cosine similarity and then fetch their **parents** for the real
-text — so the LLM sees the full section, not a 400-token fragment. Metadata filters
-(section, module, reading, year…) narrow the search; `section_expansion` pulls in every
-sibling chunk of the matched module.
+Only children are embedded. At query time we match children on cosine similarity and then
+fetch their **parents** for the real text — so the LLM sees the full section, not a
+400-token fragment. Metadata filters (section, module, reading, year…) narrow the search;
+`section_expansion` pulls in every sibling chunk of the matched module.
 
 **3. Embed.** `sentence-transformers/all-MiniLM-L6-v2` → 384-dim vectors, cosine distance
 (`<=>`), run through **fastembed** (ONNX Runtime, no torch). The dimension is baked into
@@ -53,8 +52,8 @@ sibling chunk of the matched module.
 
 There is also a separate **question bank** path: PDFs are parsed, questions are extracted via
 LLM into JSON, and loaded into `frm_questions` with a topic index. `POST /api/questions`
-returns practice questions for given topics — exact topic match first, semantic fallback over
-topic embeddings.
+returns practice questions in batches — `topics` match exactly against the stored topic tags,
+while `search_topics` (optional) match semantically over topic embeddings.
 
 ---
 
@@ -67,7 +66,7 @@ Requires Python 3.12, [pipenv](https://pipenv.pypa.io/), and a running Postgres 
 make env        # copy .env.example -> .env
 $EDITOR .env    # set DATABASE_URL, OPENROUTER_API_KEY, BOOKS_DIR
 make deps       # pipenv install
-make db-setup   # create schema + HNSW index
+make db-setup   # create schema
 make ingest     # parse -> chunk -> embed -> store  (slow first run: downloads the model)
 make run        # http://127.0.0.1:5000
 ```
@@ -78,7 +77,7 @@ Then, against a running server:
 make health                                        # readiness
 make retrieve QUERY="what is duration risk?"
 make mcq-answer QUESTION="..." OPTIONS='{"A":"...","B":"..."}'
-make questions TOPICS='["Credit Risk","VaR"]' PAGE_SIZE=10
+make questions TOPICS='["Credit Risk","VaR"]' SEARCH_TOPICS='["duration"]' PAGE=1 PAGE_SIZE=10
 ```
 
 A Streamlit UI is included: run `make run` (backend, in another terminal), then `make ui`
@@ -101,7 +100,7 @@ matter most:
 | `BOOKS_DIR` / `QUESTIONS_DIR` | where the source PDFs live (**not** in the repo) |
 | `EMBEDDING_MODEL` / `EMBEDDING_DIM` | must match `vector(384)` in the schema |
 | `MIN_CHUNK_TOKENS` / `PARENT_MAX_TOKENS` / `CHILD_*` | chunking budgets |
-| `TOPIC_MATCH_THRESHOLD` | minimum cosine similarity for the semantic topic fallback |
+| `TOPIC_MATCH_THRESHOLD` | minimum cosine similarity for the semantic topic match (`search_topics`) |
 
 `HOST` / `PORT` / `DEBUG` control the Flask server; `API_BASE_URL` points the Streamlit UI
 at the backend.
@@ -113,8 +112,8 @@ at the backend.
 | endpoint | what it does |
 |---|---|
 | `POST /api/retrieve` | `{query, filters?, top_k?, parent_expansion?, section_expansion?}` → ranked chunks with scores, metadata and source links |
-| `POST /api/mcq-answer` | `{question, options, filters?, top_k?}` → `{selected_option, explanation, rejections[]}` + `sources[]` |
-| `POST /api/questions` | `{topics[], page_size?}` → practice questions, plus which topics matched exactly vs semantically and which had no match |
+| `POST /api/mcq-answer` | `{question, options}` → `{selected_option, explanation, rejections[]}` + `sources[]`; agent uses a DDG `web_search` tool |
+| `POST /api/questions` | `{topics[]?, search_topics[]?, page_number?, page_size?}` → one batch of practice questions, plus which topics matched exactly vs semantically and which had no match; `has_more` signals the next `page_number` |
 | `GET /docs/<file>` | serves a source PDF (`doc_url` deep-links the exact page) |
 | `GET /api/health` | readiness check |
 
@@ -132,7 +131,7 @@ app/
   db.py                 connect / readiness / schema init
   embeddings.py         embedding model singleton
   llm.py                OpenRouter client with model fallback
-  agent.py              LangChain agent: retrieval as a tool
+  agent.py              LangChain agent: web_search (DDG) as a tool
   prompts.py            loads prompts/*.j2
   tokenize.py           token counting
   chat/routes.py        /api/mcq-answer
