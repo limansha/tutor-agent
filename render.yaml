@@ -3,8 +3,9 @@
 # `render blueprints validate` checks it locally if you have the Render CLI.
 #
 # Chosen plan: FREE. What that means:
-#   * both web services sleep after ~15 min idle (~1 min cold start) and share the
-#     workspace's 750 instance-hours/month,
+#   * the single web service (UI + API combined via RUN_COMBINED) sleeps after
+#     ~15 min idle (~1 min cold start) and uses the workspace's 750
+#     instance-hours/month,
 #   * the Postgres instance EXPIRES 30 DAYS AFTER CREATION (then deleted 14 days
 #     later, no backups) — re-run the steps below around day 25, or upgrade the DB,
 #   * no persistent disk, so GET /docs/<file> 404s (answers/citations unaffected).
@@ -26,17 +27,22 @@
 # extracted. `make db-setup` re-drops frm_questions, so always run the store step after.)
 
 services:
-  # Flask API — served by the image's CMD, which binds 0.0.0.0:$PORT.
+  # One combined service (free plan: one web service = half the instance-hour
+  # burn). RUN_COMBINED runs gunicorn on loopback + Streamlit on $PORT in the
+  # same container; the UI reaches the API at http://127.0.0.1:5000, so the API
+  # is NOT publicly callable — only the UI is.
   - type: web
     runtime: docker
     name: tutor-agent-api
     plan: free
-    healthCheckPath: /api/health
+    healthCheckPath: /_stcore/health
     # Free web services cannot attach a disk (and no other service can read one
     # anyway), so GET /docs/<file> 404s — answers/citations still work, only the
     # PDF links die. To restore them on a paid plan, add a `disk:` block here with
     # mountPath /books and drop the PDFs in via the Render shell.
     envVars:
+      - key: RUN_COMBINED
+        value: "1"
       - key: DATABASE_URL
         fromDatabase:
           name: tutor-agent-db
@@ -70,24 +76,6 @@ services:
         sync: false
       - key: GEMINI_MODEL
         value: gemini-3.8-flash
-
-  # Streamlit UI — same image; RUN_UI=1 makes the image's CMD run Streamlit instead
-  # of gunicorn (passing a nested `sh -c '...'` as dockerCommand breaks Render's
-  # command handling). API_BASE_URL is Render's public URL for the API, copied
-  # across so renaming the service updates it automatically.
-  - type: web
-    runtime: docker
-    name: tutor-agent-ui
-    plan: free
-    healthCheckPath: /_stcore/health
-    envVars:
-      - key: RUN_UI
-        value: "1"
-      - key: API_BASE_URL
-        fromService:
-          name: tutor-agent-api
-          type: web
-          envVarKey: RENDER_EXTERNAL_URL
 
 databases:
   # PG 13+ needed for `CREATE EXTENSION vector` (sql/schema.sql runs it in db-setup).

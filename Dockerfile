@@ -43,15 +43,18 @@ EXPOSE 5000
 
 # $PORT: Render injects PORT=10000 and waits on it; locally it falls back to 5000.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
-    CMD python -c "import os, urllib.request as u; p=os.environ.get('PORT','5000'); h='/_stcore/health' if os.environ.get('RUN_UI')=='1' else '/api/health'; u.urlopen('http://127.0.0.1:%s%s' % (p, h), timeout=4)" || exit 1
+    CMD python -c "import os, urllib.request as u; p=os.environ.get('PORT','5000'); h='/_stcore/health' if os.environ.get('RUN_UI')=='1' or os.environ.get('RUN_COMBINED')=='1' else '/api/health'; u.urlopen('http://127.0.0.1:%s%s' % (p, h), timeout=4)" || exit 1
 
-# ponytail: one image, two roles — RUN_UI=1 runs Streamlit, else gunicorn serves the
-# API. (Compose overrides `command:` per service, so this only matters for Render /
-# bare `docker run`.) 1 worker x 4 threads: the ~90MB embedding model is loaded
-# lazily on the first embed, never at boot — the hosted web-only MCQ path never
-# embeds, so on Render it stays unloaded and foots no RAM. --timeout 120 gives
-# slow requests (first embed, web-search MCQ) room so the worker isn't killed into
-# a 502. --access-logfile - prints one line per request (method, path, status) to
-# stdout so the Render Logs tab shows traffic at all. Raise --workers and add RAM
-# per worker, or move embeddings to a separate service, when traffic justifies it.
-CMD sh -c 'if [ "$RUN_UI" = "1" ]; then exec streamlit run streamlit_app.py --server.address 0.0.0.0 --server.port "${PORT:-8501}" --server.headless true; else exec gunicorn -k gthread -w 1 --threads 4 --timeout 120 --access-logfile - -b 0.0.0.0:${PORT:-5000} run:app; fi'
+# ponytail: one image, three roles. RUN_COMBINED=1 (Render): gunicorn on loopback
+# + Streamlit on $PORT in one container — only Streamlit is public, the API is
+# reached at http://127.0.0.1:5000 from the same container. RUN_UI=1 (compose ui
+# service): Streamlit only, talks to the separate `app` service. Else: gunicorn
+# API only. (Compose overrides `command:` per service.) 1 worker x 4 threads: the
+# ~90MB embedding model is loaded lazily on the first embed, never at boot — the
+# hosted web-only MCQ path never embeds, so on Render it stays unloaded and foots
+# no RAM. --timeout 120 gives slow requests (first embed, web-search MCQ) room so
+# the worker isn't killed into a 502. --access-logfile - prints one line per
+# request to stdout so the Render Logs tab shows traffic at all. Raise --workers
+# and add RAM per worker, or move embeddings to a separate service, when traffic
+# justifies it.
+CMD sh -c 'if [ "$RUN_COMBINED" = "1" ]; then gunicorn -k gthread -w 1 --threads 4 --timeout 120 --access-logfile - -b 127.0.0.1:5000 run:app & exec streamlit run streamlit_app.py --server.address 0.0.0.0 --server.port "${PORT:-8501}" --server.headless true; elif [ "$RUN_UI" = "1" ]; then exec streamlit run streamlit_app.py --server.address 0.0.0.0 --server.port "${PORT:-8501}" --server.headless true; else exec gunicorn -k gthread -w 1 --threads 4 --timeout 120 --access-logfile - -b 0.0.0.0:${PORT:-5000} run:app; fi'

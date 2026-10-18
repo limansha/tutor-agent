@@ -262,18 +262,25 @@ def store_questions_from_json(json_dir: str | None = None, force_reingest: bool 
                 skipped += 1
                 continue
             pdf_name = questions[0].get("pdf_name", "")
+            # LLM occasionally emits null question_text — drop those, don't abort the file
+            valid = [q for q in questions if (q.get("question_text") or "").strip()]
+            dropped = len(questions) - len(valid)
+            if dropped:
+                logger.warning(
+                    f"  {json_path.name}: dropping {dropped} question(s) with null/empty question_text"
+                )
             if pdf_name and _pdf_already_stored(pdf_name):
                 elapsed = time.monotonic() - file_start
                 skipped += 1
                 logger.info(f"  - {json_path.name}: {pdf_name} already in DB, skipped "
                             f"in {elapsed:.1f}s")
                 continue
-            _store_questions(questions)
+            _store_questions(valid)
             elapsed = time.monotonic() - file_start
             processed += 1
-            total_questions += len(questions)
+            total_questions += len(valid)
             logger.info(
-                f"  ✓ {json_path.name}: {len(questions)} question(s) stored "
+                f"  ✓ {json_path.name}: {len(valid)} question(s) stored "
                 f"in {elapsed:.1f}s — running total {total_questions}"
             )
         except Exception as exc:
