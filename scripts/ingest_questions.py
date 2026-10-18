@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.logging import setup_logging  # noqa: E402
 setup_logging()
+sys.stdout.reconfigure(line_buffering=True)  # logs appear promptly when piped
 
 from app import db  # noqa: E402
 from app.config import config  # noqa: E402
@@ -28,10 +29,6 @@ def main() -> int:
                         help="Phase 1: text extraction + LLM + JSON dump. "
                              "phase store: load questions_*.json into DB.")
     args = parser.parse_args()
-
-    if not db.is_ready():
-        print(f"ERROR: database not ready. Run `make db-setup` first. ({db.readiness_hint()})")
-        return 1
 
     start = time.monotonic()
 
@@ -48,6 +45,9 @@ def main() -> int:
         if results.get("message"):
             print(f"\n{results['message']}")
     elif args.phase == "store":
+        if not db.is_ready():
+            print(f"ERROR: database not ready. Run `make db-setup` first. ({db.readiness_hint()})")
+            return 1
         results = store_questions_from_json(force_reingest=args.force_reingest)
         elapsed = int((time.monotonic() - start) * 1000)
         print(

@@ -106,12 +106,13 @@ def _topic_rows(qid: int, topics: list[str]) -> list[tuple]:
 def _store_questions(questions: list[dict]) -> None:
     if not questions:
         return
-    logger.info(f"  Storing {len(questions)} question(s) to DB...")
+    total = len(questions)
+    logger.info(f"  Storing {total} question(s) to DB...")
     conn = db.connect()
     try:
         with conn.cursor() as cur:
             topic_rows: list[tuple] = []
-            for q in questions:
+            for i, q in enumerate(questions, start=1):
                 opts = q.get("options", {})
                 cur.execute(
                     """
@@ -131,6 +132,8 @@ def _store_questions(questions: list[dict]) -> None:
                     ),
                 )
                 topic_rows += _topic_rows(cur.fetchone()[0], q.get("question_topics", []))
+                if i % 25 == 0 or i == total:
+                    logger.info(f"    {i}/{total} question(s) inserted")
             if topic_rows:
                 cur.executemany(
                     """
@@ -169,9 +172,6 @@ def ingest_questions(books_dir: str | None = None) -> dict:
     logger.info("=" * 60)
     logger.info("Starting Phase 1 question ingestion")
     logger.info("=" * 60)
-
-    if not db.is_ready():
-        raise db.DatabaseNotReady(db.readiness_hint())
 
     directory = Path(books_dir) if books_dir else Path(config.QUESTIONS_DIR)
     logger.info(f"Source directory: {directory}")
@@ -274,7 +274,7 @@ def store_questions_from_json(json_dir: str | None = None, force_reingest: bool 
             total_questions += len(questions)
             logger.info(
                 f"  ✓ {json_path.name}: {len(questions)} question(s) stored "
-                f"in {elapsed:.1f}s"
+                f"in {elapsed:.1f}s — running total {total_questions}"
             )
         except Exception as exc:
             elapsed = time.monotonic() - file_start
