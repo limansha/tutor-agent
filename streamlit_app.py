@@ -166,6 +166,88 @@ TOPICS = [
     "Derivatives - Option Pricing",
     "Ethics and Professional Standards",
 ]
+# One-click topic groups, named after the FRM syllabus papers/chapters. Every
+# TOPICS entry must appear in exactly one group (asserted at import below).
+TOPIC_GROUPS: dict[str, list[str]] = {
+    "Foundations & Ethics": [
+        "Risk Management", "Risk Management Framework", "Risk Governance",
+        "Risk Identification", "Corporate Risk Management", "Business Risk",
+        "Corporate Governance", "Accounting", "Ethics and Professional Conduct",
+        "Ethics and Professionalism", "Ethics and Professional Standards",
+        "Insurance", "Life Insurance", "Insurance and Actuarial Science",
+    ],
+    "Quantitative Analysis": [
+        "Quantitative Analysis", "Probability", "Probability Theory",
+        "Conditional Probability", "Independence", "Statistical Distributions",
+        "Continuous Distributions", "Statistics", "Descriptive Statistics",
+        "Statistical Analysis", "Statistical Methods", "Statistical Inference",
+        "Statistical Concepts and Market Risk", "Skewness",
+        "Correlation and Covariance", "Regression Analysis", "Least Squares",
+        "Multicollinearity", "Variance Inflation Factor",
+        "Coefficient of Determination", "Hypothesis Testing", "Bayes Theorem",
+        "Resampling Methods", "Time Series Analysis", "GARCH",
+    ],
+    "Markets, Derivatives & Hedging": [
+        "Derivatives", "Futures", "OTC derivatives", "Repo",
+        "Cost of Carry", "Cash Carry", "Delivery Options", "Index Futures",
+        "Commodity Futures", "Margin and Leverage", "Currency Risk",
+        "Market Risk", "Trading and Market Risk", "Interest Rates",
+        "Futures and Options", "Options and Futures",
+        "Futures and Forward Pricing", "Hedging", "Hedging Strategies",
+        "Arbitrage",
+    ],
+    "Fixed Income — Bonds & Yields": [
+        "Bond Pricing", "Bond Valuation", "Bond Pricing and Yield",
+        "Bond Duration", "Duration", "Duration and Convexity", "Fixed Income",
+        "Fixed Income - Bonds", "Fixed Income - Yield Spreads", "Yield Curve",
+        "Yield Curve Construction", "Term structure theory", "Bootstrapping",
+        "Accrued Interest", "Treasury Bonds", "Immunization",
+    ],
+    "Fixed Income — Rates & Swaps": [
+        "Fixed Income - Swaps", "Fixed Income Derivatives",
+        "Interest Rate Calculations", "Interest Rate Risk",
+        "Interest Rate Swaps", "Present Value", "Discounting Cash Flows",
+        "Compounding", "Continuous Compounding", "Monthly Compounding",
+        "Compounding Interest Rates", "Nominal vs Effective Rates",
+    ],
+    "Equity & Portfolio Management": [
+        "Equity Derivatives", "Equity Strategies", "Equity Market Neutral",
+        "CAPM", "Capital Asset Pricing Model", "Asset Pricing Models",
+        "Portfolio Theory", "Modern portfolio theory", "Portfolio Management",
+        "Investment Management", "Investment Performance Measurement",
+        "Performance Measurement", "Risk-Adjusted Performance Measures",
+        "Risk-Adjusted Return", "Sortino Ratio",
+        "Hedge Fund Fees and Performance", "Incentive Compensation",
+    ],
+    "Options & Volatility": [
+        "Options", "Option Payoffs", "Option Strategies", "Options Strategies",
+        "Option pricing", "Option Pricing Models",
+        "Derivatives - Option Pricing", "Option Sensitivity",
+        "Option Sensitivities", "Greeks", "Binomial Models",
+        "European Options", "American Options", "Put-Call parity",
+        "Risk-Neutral Valuation", "Dividend adjustments", "Volatility",
+        "Volatility Estimation", "Volatility Modeling",
+        "Volatility and Correlation",
+    ],
+    "VaR & Risk Models": [
+        "Value at Risk", "Value at Risk (VaR)", "Stress Testing",
+        "Risk Measures", "Risk Measurement", "Liquidity",
+    ],
+    "Credit Risk": [
+        "Credit Risk", "Credit Risk Modeling", "Credit Risk Management",
+        "Banking and Credit Risk", "Expected Loss", "Recovery Rates",
+        "Credit Ratings", "Credit Rating Agencies", "Counterparty Risk",
+        "Basel Accord", "Capital Adequacy", "Supervisory Review",
+    ],
+    "Liquidity, Operational & Other Risks": [
+        "Liquidity Risk", "Liquidity Risk Management", "Operational Risk",
+        "Basic Indicator Approach", "Legal Risk", "Sovereign Risk",
+        "Regulatory Risk",
+    ],
+}
+assert sorted(t for g in TOPIC_GROUPS.values() for t in g) == sorted(TOPICS), (
+    "TOPIC_GROUPS must cover every TOPICS entry exactly once"
+)
 PAGE_SIZE = 2  # questions rendered per page
 
 st.set_page_config(page_title="FRM MCQ Practice", layout="wide")
@@ -251,14 +333,28 @@ def main() -> None:
 
     with st.sidebar:
         st.header("Topics")
-        all_topics = st.checkbox("All topics", key="topic_all", value=True)
-        checked = [
-            t
-            for t in TOPICS
-            if st.checkbox(t, key=f"topic_{t}", value=True, disabled=all_topics)
-        ]
-        if all_topics:
-            checked = []
+        all_topics = st.checkbox("All topics", key="topic_all", value=False)
+        st.caption("One click adds a whole group (click again to add more):")
+        group_cols = st.columns(2)
+        for i, (gname, gtopics) in enumerate(TOPIC_GROUPS.items()):
+            if group_cols[i % 2].button(
+                f"{gname} ({len(gtopics)})",
+                key=f"group_{i}",
+                disabled=all_topics,
+                use_container_width=True,
+            ):
+                cur = st.session_state.get("topic_pick") or []
+                st.session_state.topic_pick = list(dict.fromkeys(cur + gtopics))
+        if st.button("Clear selection", key="group_clear", disabled=all_topics,
+                     use_container_width=True):
+            st.session_state.topic_pick = []
+        picked = st.multiselect(
+            "Topics (type to filter)",
+            options=TOPICS,
+            key="topic_pick",
+            disabled=all_topics,
+        )
+        checked = [] if all_topics else picked
         page_size = st.slider("Questions per fetch", min_value=3, max_value=100, value=100)
         fetch_btn = st.button("Fetch questions", type="primary", use_container_width=True)
 
