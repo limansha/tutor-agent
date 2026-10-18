@@ -1,4 +1,4 @@
-"""Free web search for the agent's `web_search` tool (DuckDuckGo Lite, no key).
+"""Free web search for the MCQ answer path (DuckDuckGo Lite, no key).
 
 Scrapes the DDG-Lite HTML with only `requests` + stdlib `html.parser`; on any
 failure it returns no results and the model falls back to its own knowledge.

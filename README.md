@@ -2,8 +2,7 @@
 
 A retrieval-augmented **study agent**. It ingests a folder of source-document PDFs into
 Postgres + pgvector, then answers questions against that corpus — either by retrieving the
-relevant passages, or by running an agent that reasons over them to pick and explain a
-multiple-choice answer.
+relevant passages, or by answering a multiple-choice question from web search excerpts.
 
 The source corpus is **not** in this repo. Point `BOOKS_DIR` /
 `QUESTIONS_DIR` at your own copy.
@@ -47,8 +46,8 @@ fetch their **parents** for the real text — so the LLM sees the full section, 
 
 **4. Answer.** Two modes:
 - **Retrieve** — pure RAG, no LLM needed. Returns ranked chunks with scores and source links.
-- **Agentic MCQ** — a LangChain agent calls retrieval as a *tool*, then returns the selected
-  option, an explanation, and why the other options were rejected.
+- **MCQ answer** — one DuckDuckGo search feeds excerpts into a single structured LLM call
+  that returns the selected option, an explanation, and why the others were rejected.
 
 There is also a separate **question bank** path: PDFs are parsed, questions are extracted via
 LLM into JSON, and loaded into `frm_questions` with a topic index. `POST /api/questions`
@@ -112,7 +111,7 @@ at the backend.
 | endpoint | what it does |
 |---|---|
 | `POST /api/retrieve` | `{query, filters?, top_k?, parent_expansion?, section_expansion?}` → ranked chunks with scores, metadata and source links |
-| `POST /api/mcq-answer` | `{question, options}` → `{selected_option, explanation, rejections[]}` + `sources[]`; agent uses a DDG `web_search` tool |
+| `POST /api/mcq-answer` | `{question, options}` → `{selected_option, explanation, rejections[]}` + `sources[]`; one DDG search on the question, then one structured LLM call |
 | `POST /api/questions` | `{topics[]?, search_topics[]?, page_number?, page_size?}` → one batch of practice questions, plus which topics matched exactly vs semantically and which had no match; `has_more` signals the next `page_number` |
 | `GET /docs/<file>` | serves a source PDF (`doc_url` deep-links the exact page) |
 | `GET /api/health` | readiness check |
@@ -130,8 +129,8 @@ app/
   config.py             env config
   db.py                 connect / readiness / schema init
   embeddings.py         embedding model singleton
-  llm.py                OpenRouter client with model fallback
-  agent.py              LangChain agent: web_search (DDG) as a tool
+  llm/                  provider registry + cross-provider failover
+  agent.py              one DDG search + one structured LLM call
   prompts.py            loads prompts/*.j2
   tokenize.py           token counting
   chat/routes.py        /api/mcq-answer

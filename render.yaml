@@ -48,11 +48,28 @@ services:
         value: /books
       - key: QUESTIONS_DIR
         value: /books
-      # Hosted corpus is questions-only, so /api/mcq-answer uses the web_search
-      # tool instead of frm_books. Free models keep it on the free tier; swap to
+      # Hosted corpus is questions-only, so /api/mcq-answer searches the web
+      # instead of frm_books. Free models keep it on the free tier; swap to
       # paid slugs once credits exist (OPENROUTER_MODEL=openai/gpt-oss-20b).
       - key: OPENROUTER_MODEL
-        value: nvidia/nemotron-3-super-120b-a12b:free
+        value: nvidia/nemotron-3-ultra-550b-a55b:free
+      # Tuning knobs, exposed so they can be changed from the dashboard without a
+      # redeploy. TEMPERATURE 0.2 keeps answers stable; MAX_TOKENS caps request
+      # size (hence credit cost) and bounds the final structured answer.
+      - key: OPENROUTER_TEMPERATURE
+        value: "0.2"
+      - key: OPENROUTER_MAX_TOKENS
+        value: "4000"
+      # Optional cross-provider fallbacks (app/llm/): independent quotas so an
+      # OpenRouter 429 doesn't take the endpoint down. Leave blank to skip a hop.
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-20b
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.8-flash
 
   # Streamlit UI — same image; RUN_UI=1 makes the image's CMD run Streamlit instead
   # of gunicorn (passing a nested `sh -c '...'` as dockerCommand breaks Render's

@@ -28,6 +28,9 @@ questions/*
 # local-only agent notes
 AGENTS.md
 
+# local-only self-check scripts (assert-based, run by hand: python test_*.py)
+test_*.py
+
 .DS_Store
 .idea/
 .vscode/

@@ -37,7 +37,7 @@ class RetrieveRequest(BaseModel):
 
 
 class MCQChatRequest(BaseModel):
-    """Agentic chat request: a question plus multiple-choice options."""
+    """A question plus multiple-choice options."""
 
     question: str = Field(..., min_length=1)
     options: dict[str, str] = Field(..., min_length=2)
@@ -57,7 +57,7 @@ class OptionRejection(BaseModel):
 
 
 class MCQAnswer(BaseModel):
-    """Structured answer produced by the agent (response_format schema)."""
+    """Structured answer produced by the LLM (response_format schema)."""
 
     selected_option_label: str
     selected_option_text: str

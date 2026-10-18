@@ -1,24 +1,23 @@
-"""Agentic MCQ chat: OpenRouter agent that produces a structured MCQAnswer.
+"""MCQ answer: one DuckDuckGo search + one structured LLM call (no agent loop).
 
-The agent has one tool, `web_search` (DuckDuckGo Lite scrape, free and keyless —
-see app/websearch.py). It decides what to search, calls the tool, and answers
-from the returned excerpts. The RAG retrieval code (app/retrieval/*) still exists
-and is served by POST /api/retrieve, but the MCQ path does not use it: books are
-not being ingested right now (memory limits), so the tool is web-based.
+The search runs once per request (keyless DDG-Lite scrape — see app/websearch.py),
+its excerpts are pasted into the prompt, and a single `with_structured_output`
+call returns an MCQAnswer. Dropping `create_agent`/tools removes every
+tool-calling failure mode seen when switching models: Gemini's thought_signature
+400 on the tool round-trip, gpt-oss mis-calling tool args, and the
+response_format + tool-calling conflict behind the old ToolStrategy workaround.
+A parse failure on one provider now fails over to the next, like an API error.
 
-Model routing (primary -> fallbacks across OPENROUTER_API on APIError) is shared
-in app/llm.with_llm_fallback.
-"""
+Model routing (OpenRouter primary -> Groq -> Gemini) is shared in
+app/llm.with_llm_fallback."""
 
 from __future__ import annotations
 
-from langchain.agents import create_agent
-from langchain.agents.factory import ToolStrategy
-from langchain_core.messages import HumanMessage
-from langchain_core.tools import tool
+from langchain_core.exceptions import OutputParserException
+from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.config import config
-from app.llm import get_llm, with_llm_fallback
+from app.llm import LLMSpec, get_llm, with_llm_fallback
 from app.prompts import render
 from app.schemas import ChunkMetadata, MCQAnswer, SourceChunk
 from app import websearch
@@ -48,59 +47,53 @@ def _result_sources(
     return out
 
 
+def _search(question: str) -> tuple[str, list[SourceChunk]]:
+    """One DDG search for `question` -> (excerpt block for the prompt, sources)."""
+    results = websearch.search(
+        question,
+        max_results=config.WEB_SEARCH_MAX_RESULTS,
+        exclude_domains=config.WEB_SEARCH_EXCLUDE_DOMAINS,
+    )
+    if not results:
+        return "No web excerpts found.", []
+    block = "\n\n".join(
+        f"[{i}] {r['title']}\n{r['url']}\n{r['snippet']}"
+        for i, r in enumerate(results, 1)
+    )
+    return block, _result_sources(results, set())
+
+
 def _answer_once(
-    model: str,
+    spec: LLMSpec,
     question: str,
     options: dict[str, str],
-) -> tuple[MCQAnswer, list[SourceChunk]]:
-    """Run one agent build+invoke on a single model, returning (answer, sources)."""
-    used_sources: list[SourceChunk] = []
-    seen_urls: set[str] = set()
-
-    @tool
-    def web_search(query: str) -> str:
-        """Search the web for context on `query`. Returns title/url/snippet
-        excerpts as plain text. Call this before answering."""
-        results = websearch.search(
-            query,
-            max_results=config.WEB_SEARCH_MAX_RESULTS,
-            exclude_domains=config.WEB_SEARCH_EXCLUDE_DOMAINS,
-        )
-        if not results:
-            return "No web results found."
-        used_sources.extend(_result_sources(results, seen_urls))
-        return "\n\n".join(
-            f"[{i}] {r['title']}\n{r['url']}\n{r['snippet']}"
-            for i, r in enumerate(results, 1)
-        )
-
-    llm = get_llm(model)
-    agent = create_agent(
-        model=llm,
-        tools=[web_search],
-        system_prompt=_SYSTEM_PROMPT,
-        response_format=ToolStrategy(MCQAnswer),
-    )
-
+    excerpts: str,
+) -> MCQAnswer:
+    """One structured call on one model; raises APIError/OutputParserException."""
     option_block = "\n".join(f"{label}. {text}" for label, text in options.items())
-    result = agent.invoke(
-        {"messages": [HumanMessage(content=f"{question}\n\nOptions:\n{option_block}")]}
+    prompt = (
+        f"Web search excerpts:\n{excerpts}\n\n"
+        f"{question}\n\nOptions:\n{option_block}"
     )
-
-    structured = result.get("structured_response")
-    if not isinstance(structured, MCQAnswer):
-        raise RuntimeError(
-            "Agent did not produce a structured response. Check OPENROUTER_MODEL "
-            "supports tool calling + structured output."
-        )
-    return structured, used_sources
+    structured = get_llm(spec).with_structured_output(MCQAnswer)
+    return structured.invoke(
+        [SystemMessage(content=_SYSTEM_PROMPT), HumanMessage(content=prompt)]
+    )
 
 
 def answer_mcq(
     question: str,
     options: dict[str, str],
-) -> tuple[MCQAnswer, list[SourceChunk]]:
-    """Run the agent and return (structured MCQAnswer, web sources used)."""
+) -> tuple[MCQAnswer, list[SourceChunk], LLMSpec]:
+    """Search once, then answer; returns (MCQAnswer, web sources, winning spec)."""
     if not options:
         raise ValueError("options must not be empty")
-    return with_llm_fallback(lambda model: _answer_once(model, question, options))
+    excerpts, sources = _search(question)
+    winner: list[LLMSpec] = []
+
+    def _run(spec: LLMSpec) -> MCQAnswer:
+        winner.append(spec)
+        return _answer_once(spec, question, options, excerpts)
+
+    answer = with_llm_fallback(_run, retry_on=(OutputParserException,))
+    return answer, sources, winner[-1]
