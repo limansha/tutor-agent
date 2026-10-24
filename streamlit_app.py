@@ -291,6 +291,65 @@ def render_question(q: dict) -> None:
                     f"**Explanation:** {checked['explanation'] or 'Yet to generate explanation'}"
                 )
 
+
+def batch_as_markdown(questions: list[dict], checks: dict) -> str:
+    lines = ["# FRM Practice Questions", ""]
+    for number, question in enumerate(questions, start=1):
+        qid = question["qid"]
+        checked = checks.get(qid, {})
+        selected = st.session_state.get(f"choice_{qid}")
+        correct = checked.get("correct_answer") or question.get("answer", "")
+        result = (
+            "Correct"
+            if checked.get("is_correct")
+            else "Incorrect"
+            if checked
+            else "Not checked"
+        )
+        explanation = checked.get("explanation") or question.get("explanation", "")
+
+        lines.extend([f"## {number}. {question['question_text']}", "", "### Options", ""])
+        lines.extend(
+            f"- **{label}.** {text}" for label, text in question["options"].items()
+        )
+        lines.extend(
+            [
+                "",
+                f"**Selected answer:** {selected or 'Not answered'}",
+                f"**Correct answer:** {correct or 'Unknown'}",
+                f"**Result:** {result}",
+                "",
+                "### Explanation",
+                "",
+                explanation or "Yet to generate explanation",
+                "",
+            ]
+        )
+    return "\n".join(lines)
+
+
+@st.dialog("Load more questions?")
+def confirm_load_next_batch() -> None:
+    st.write(
+        "Your current batch will be replaced by the next batch. "
+        "Any selections, answer checks, and explanations from this batch "
+        "will be cleared, and you will not be able to go back to it."
+    )
+    st.download_button(
+        "Export current batch",
+        data=batch_as_markdown(
+            st.session_state.get("questions", []),
+            st.session_state.get("checks", {}),
+        ),
+        file_name=f"frm_questions_batch_{st.session_state.get('server_page', 1)}.md",
+        mime="text/markdown",
+        use_container_width=True,
+    )
+    if st.button("Load next batch", type="primary", use_container_width=True):
+        st.session_state.load_next_batch_confirmed = True
+        st.rerun()
+
+
 def main() -> None:
     st.title("FRM MCQ Practice")
     st.session_state.setdefault("explanations", {})
@@ -370,9 +429,12 @@ def main() -> None:
     for q in page_qs:
         render_question(q)
 
-    if st.session_state.get("has_more") and st.button(
-        "Load next batch", use_container_width=True
+    if page >= page_count - 1 and st.session_state.get("has_more") and st.button(
+        "Load next batch", type="primary", use_container_width=True
     ):
+        confirm_load_next_batch()
+
+    if st.session_state.pop("load_next_batch_confirmed", False):
         try:
             with st.spinner("Fetching more questions..."):
                 data = call(
@@ -384,9 +446,12 @@ def main() -> None:
         except Exception as exc:
             st.error(f"Failed to fetch more questions: {exc}")
         else:
-            st.session_state.questions += data["questions"]
+            st.session_state.questions = data["questions"]
             st.session_state.server_page += 1
             st.session_state.has_more = data.get("has_more", False)
+            st.session_state.page = 0
+            st.session_state.checks = {}
+            st.session_state.explanations = {}
             st.rerun()
 
     if st.button("Check Answers", type="primary", use_container_width=True):
