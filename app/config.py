@@ -64,13 +64,6 @@ class Config:
     QUESTIONS_JSON_FILES_DIR: str = os.getenv(
         "QUESTIONS_JSON_FILES_DIR", str(BASE_DIR / "questions_dump" / "json_files")
     ).strip()
-    QUESTIONS_FAILED_JSON_DIR: str = os.getenv(
-        "QUESTIONS_FAILED_JSON_DIR", str(BASE_DIR / "questions_dump" / "failed_json_files")
-    ).strip()
-    QUESTIONS_FAILED_RESPONSES_DIR: str = os.getenv(
-        "QUESTIONS_FAILED_RESPONSES_DIR",
-        str(BASE_DIR / "questions_dump" / "failed_responses"),
-    ).strip()
     # Question-ingestion LLM settings (kept separate from the MCQ answer path).
     INGEST_MODEL: str = os.getenv("INGEST_MODEL", "").strip()
     INGEST_TEMPERATURE: float = float(os.getenv("INGEST_TEMPERATURE", "0"))

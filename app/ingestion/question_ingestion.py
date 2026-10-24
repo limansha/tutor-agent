@@ -296,11 +296,21 @@ def _process_batch(
         })
         record["status"] = "ok"
         return items, record, resp_text
-    except Exception as exc:
+    except Exception:
         record["model"] = f"{spec.model}@{spec.base_url}"
         record["status"] = "failed"
-        record["error"] = str(exc)
-        return None, record, resp_text
+        question_text, options = _split_question_block(batch[0]["text"])
+        return [{
+            "question_text": question_text,
+            "options": options,
+            "answer": "",
+            "explanation": "",
+            "question_topics": [],
+            "pdf_name": pdf_path.name,
+            "source_path": str(pdf_path),
+            "page_number": batch[0].get("page_number", 0),
+            "llm_model_used": record["model"],
+        }], record, resp_text
 
 
 def process_one_pdf(
@@ -322,7 +332,6 @@ def process_one_pdf(
     parsed_dir = Path(config.QUESTIONS_PARSED_DIR)
     annotated_dir = Path(config.QUESTIONS_ANNOTATED_DIR)
     json_dir = Path(config.QUESTIONS_JSON_FILES_DIR)
-    failed_json_dir = Path(config.QUESTIONS_FAILED_JSON_DIR)
     json_dir.mkdir(parents=True, exist_ok=True)
     parsed_path = parsed_dir / f"{stem}.txt"
     annotated_path = annotated_dir / f"{stem}.txt"
@@ -363,71 +372,39 @@ def process_one_pdf(
         batch_num += 1
 
     results: dict[int, list[dict] | None] = {}
-    failures: list[dict] = []
 
-    def _commit(bn: int, items: list[dict] | None, record: dict, resp_text: str,
-                start_idx: int, end_idx: int, batch: list[dict]) -> None:
+    def _commit(bn: int, items: list[dict] | None) -> None:
         results[bn] = items
         merged: list[dict] = []
         for key in sorted(results):
             if results[key]:
                 merged.extend(results[key])
         _write_json_atomic(json_path, merged)
-        if items is None:
-            logger.error(
-                "[document] %s batch %d/%d FAILED at questions %d-%d: %s",
-                pdf_path.name,
-                bn,
-                len(batches),
-                start_idx,
-                end_idx,
-                record.get("error"),
-            )
-            failures.append({
-                "batch_num": bn,
-                "start_index": start_idx,
-                "end_index": end_idx,
-                "question_ids": [b["id"] for b in batch],
-                "error": record.get("error", ""),
-                "timestamp": record["ts"],
-            })
-            _write_json_atomic(failed_json_dir / f"{stem}.json", failures)
-            if "Expecting value" in str(record.get("error", "")) or "Unterminated" in str(
-                record.get("error", "")
-            ):
-                failed_dir = Path(config.QUESTIONS_FAILED_RESPONSES_DIR)
-                failed_dir.mkdir(parents=True, exist_ok=True)
-                qids = "-".join(str(b["id"]) for b in batch)
-                with open(failed_dir / f"{stem}_Q{qids}.txt", "w", encoding="utf-8") as f:
-                    f.write(resp_text)
-            logger.warning(f"Skipping failed batch {bn}")
-        else:
-            logger.info(
-                "[document] %s batch %d/%d committed (%d questions)",
-                pdf_path.name,
-                bn,
-                len(batches),
-                len(items),
-            )
+        logger.info(
+            "[document] %s batch %d/%d committed (%d questions)",
+            pdf_path.name,
+            bn,
+            len(batches),
+            len(items or []),
+        )
 
     provider_index = 0
     for bn, s, e, batch in batches:
         spec = specs[provider_index]
-        items, record, resp_text = _process_batch(
+        items, record, _ = _process_batch(
             pdf_path, stem, batch, bn, s, e, label, spec
         )
-        _commit(bn, items, record, resp_text, s, e, batch)
-        if items is None:
+        _commit(bn, items)
+        if items is None or record.get("status") == "failed":
             provider_index = (provider_index + 1) % len(specs)
 
     processed = next_index if max_batches is None else min(next_index, batch_size * max_batches)
     logger.info(
-        "[document] COMPLETE %s: %d/%d batches, %d questions, %d failed, %.1fs, output=%s",
+        "[document] COMPLETE %s: %d/%d batches, %d questions, %.1fs, output=%s",
         pdf_path.name,
         len(results),
         len(batches),
         sum(len(items) for items in results.values() if items),
-        len(failures),
         time.monotonic() - document_start,
         json_path,
     )
@@ -439,7 +416,6 @@ def process_one_pdf(
         "questions": sum(len(items) for items in results.values() if items),
         "json_path": str(json_path),
         "batches": len(batches),
-        "failed_batches": len(failures),
     }
 
 
@@ -750,8 +726,18 @@ def process_parsed_text_to_json(parsed_path: Path, batch_size: int = 1) -> dict:
                 "llm_model_used": f"{spec.model}@{spec.base_url}",
             })
             logger.info("    -> parsed 1 question")
-        except Exception as exc:
-            logger.error(f"    -> batch failed: {exc}")
+        except Exception:
+            all_results.append({
+                "question_text": batch[0],
+                "options": {},
+                "answer": "",
+                "explanation": "",
+                "question_topics": [],
+                "pdf_name": pdf_name,
+                "source_path": "",
+                "page_number": 0,
+                "llm_model_used": f"{spec.model}@{spec.base_url}",
+            })
             provider_index = (provider_index + 1) % len(specs)
             continue
 

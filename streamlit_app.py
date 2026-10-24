@@ -278,17 +278,23 @@ def render_question(q: dict) -> None:
 
         checked = st.session_state.checks.get(qid)
         if checked and checked["submitted"] == st.session_state.get(f"choice_{qid}"):
-            if checked["chosen"] is None:
-                st.info(f"**Not answered** — correct answer: {checked['correct_answer']}")
+            correct_answer = checked.get("correct_answer") or ""
+            explanation = checked.get("explanation") or ""
+            if not correct_answer and not explanation:
+                st.info("The answer and explanation are not available for this question yet.")
+            elif not correct_answer:
+                st.info("The correct answer is not available for this question yet.")
+            elif checked["chosen"] is None:
+                st.info(f"**Not answered** — correct answer: {correct_answer}")
             elif checked["is_correct"]:
                 st.success("**Correct**")
             else:
-                st.error(f"**Incorrect** — correct answer: {checked['correct_answer']}")
+                st.error(f"**Incorrect** — correct answer: {correct_answer}")
             if st.button("Explanation", key=f"explanation_{qid}", use_container_width=True):
                 st.session_state.explanations[qid] = True
             if st.session_state.explanations.get(qid):
                 st.markdown(
-                    f"**Explanation:** {checked['explanation'] or 'Yet to generate explanation'}"
+                    f"**Explanation:** {explanation or 'An explanation is not available for this question yet.'}"
                 )
 
 
@@ -321,7 +327,7 @@ def batch_as_markdown(questions: list[dict], checks: dict) -> str:
                 "",
                 "### Explanation",
                 "",
-                explanation or "Yet to generate explanation",
+                explanation or "An explanation is not available for this question yet.",
                 "",
             ]
         )
