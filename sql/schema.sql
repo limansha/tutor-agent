@@ -77,3 +77,5 @@ CREATE TABLE IF NOT EXISTS frm_question_topics (
 CREATE INDEX IF NOT EXISTS frm_questions_pdf_name_idx ON frm_questions (pdf_name);
 CREATE INDEX IF NOT EXISTS frm_questions_source_path_idx ON frm_questions (source_path);
 CREATE INDEX IF NOT EXISTS frm_questions_question_topics_idx ON frm_questions USING GIN (question_topics);
+CREATE UNIQUE INDEX IF NOT EXISTS frm_questions_question_text_uidx
+    ON frm_questions (question_text);

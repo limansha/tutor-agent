@@ -449,6 +449,7 @@ def _store_questions(questions: list[dict]) -> None:
                          question_topics, pdf_name, source_path, page_number,
                          llm_model_used)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (question_text) DO NOTHING
                     RETURNING qid
                     """,
                     (
@@ -459,7 +460,9 @@ def _store_questions(questions: list[dict]) -> None:
                         q.get("llm_model_used", config.OPENROUTER_MODEL),
                     ),
                 )
-                topic_rows += _topic_rows(cur.fetchone()[0], q.get("question_topics", []))
+                inserted = cur.fetchone()
+                if inserted:
+                    topic_rows += _topic_rows(inserted[0], q.get("question_topics", []))
                 if i % 25 == 0 or i == total:
                     logger.info(f"    {i}/{total} question(s) inserted")
             if topic_rows:
