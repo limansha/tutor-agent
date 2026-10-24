@@ -45,23 +45,25 @@ CREATE INDEX IF NOT EXISTS frm_books_section_idx ON frm_books (section);
 DROP INDEX IF EXISTS frm_books_embedding_hnsw;
 DROP INDEX IF EXISTS frm_question_topics_emb_hnsw;
 
--- FRM Questions table: one-time ingestion of practice exam questions.
-DROP TABLE IF EXISTS frm_questions CASCADE;
-
+-- FRM Questions table. Columns mirror the question JSON files.
 CREATE TABLE IF NOT EXISTS frm_questions (
     qid                     BIGSERIAL PRIMARY KEY,
     question_text           TEXT NOT NULL,
     options                 JSONB NOT NULL DEFAULT '{}',
     answer                  TEXT NOT NULL,
-    has_answer_in_doc       BOOLEAN NOT NULL DEFAULT false,
+    explanation             TEXT NOT NULL DEFAULT '',
     question_topics         TEXT[] NOT NULL,
-    prerequisites           JSONB NOT NULL DEFAULT '{}',
     pdf_name                TEXT NOT NULL,
     source_path             TEXT NOT NULL,
     page_number             INT NOT NULL,
-    ingested_at             TIMESTAMP DEFAULT NOW(),
     llm_model_used          TEXT
 );
+
+-- Migrate databases created with the previous question shape without losing rows.
+ALTER TABLE frm_questions ADD COLUMN IF NOT EXISTS explanation TEXT NOT NULL DEFAULT '';
+ALTER TABLE frm_questions DROP COLUMN IF EXISTS has_answer_in_doc;
+ALTER TABLE frm_questions DROP COLUMN IF EXISTS prerequisites;
+ALTER TABLE frm_questions DROP COLUMN IF EXISTS ingested_at;
 
 -- Per-topic embeddings: one row per (question, topic) so each topic can be
 -- filtered independently (pgvector cannot index/filter a vector[] column).

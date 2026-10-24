@@ -4,4 +4,11 @@ Given a multiple-choice question with options (A, B, C, ...):
 2. Prefer authoritative FRM and risk sources (GARP, regulators, standards bodies, official study-material sites). Ignore Q&A sites, forums and answer mills: a page that only shows the question without a reliable explanation is not a usable source.
 3. Use the excerpts to determine the correct option. Do not answer from memory when they cover the point; if a deciding fact is missing from them, say what is missing and fall back on well-established FRM principles.
 4. State why the chosen option is correct and why each of the other options is wrong.
-Never invent facts or citations that the excerpts do not support. If no excerpts are given, answer from well-established FRM principles and cite nothing.
+5. Never invent facts or citations that the excerpts do not support. If no excerpts are given, answer from well-established FRM principles and cite nothing.
+6. Return plain text in exactly this format, not JSON or markdown fences:
+ANSWER: <one option label>
+EXPLANATION: <why the answer is correct, no more than 200 words>
+REJECTIONS:
+<label>: <why this option is wrong>
+<label>: <why this option is wrong>
+Include one rejection line for every option except the answer.

@@ -27,17 +27,21 @@ def chat():
         start = time.monotonic()
         answer, sources, spec = answer_mcq(body.question, body.options)
     except APIError as exc:
-        logger.exception("mcq-answer: provider error")
+        logger.exception("mcq-answer: provider error (route elapsed %.3fs)", time.monotonic() - start)
         return jsonify(
             ServiceUnavailable(error=str(exc), hint="OpenRouter provider error; retry shortly.").model_dump()
         ), 503
     except (RuntimeError, ValueError) as exc:
-        logger.exception("mcq-answer: no usable answer")
+        logger.exception("mcq-answer: no usable answer (route elapsed %.3fs)", time.monotonic() - start)
         return jsonify(
-            ServiceUnavailable(error=str(exc), hint="Set OPENROUTER_API_KEY in .env and restart.").model_dump()
+            ServiceUnavailable(
+                error=str(exc),
+                hint="Set a provider key or run Ollama locally, then restart.",
+            ).model_dump()
         ), 503
 
     elapsed_ms = int((time.monotonic() - start) * 1000)
+    logger.info("mcq-answer: route total %.3fs (model=%s)", elapsed_ms / 1000.0, spec.model)
     response = MCQChatResponse(
         question=body.question,
         answer=answer,

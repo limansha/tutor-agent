@@ -19,6 +19,10 @@ questions_dump/
 *.dump
 *.pdf
 
+# Render database recovery is local-only: never commit scripts or dumps.
+scripts/render_db/
+render_db_dumps/
+
 # docker compose PDF mounts (keep the dirs, ignore their contents)
 books/*
 !books/.gitkeep

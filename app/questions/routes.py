@@ -31,8 +31,8 @@ from app.schemas import (
 bp = Blueprint("questions", __name__)
 
 _Q_COLS = (
-    "qid", "question_text", "options", "answer", "has_answer_in_doc",
-    "question_topics", "prerequisites", "pdf_name", "source_path", "page_number",
+    "qid", "question_text", "options", "answer", "explanation",
+    "question_topics", "pdf_name", "source_path", "page_number", "llm_model_used",
 )
 
 _EXACT_SQL = f"""
@@ -209,10 +209,13 @@ def check_answer():
         with db.connect() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT qid, answer FROM frm_questions WHERE qid = ANY(%s)",
+                    "SELECT qid, answer, explanation FROM frm_questions WHERE qid = ANY(%s)",
                     (qids,),
                 )
-                correct_by_qid = {qid: ans for qid, ans in cur.fetchall()}
+                correct_by_qid = {
+                    qid: (answer, explanation or "")
+                    for qid, answer, explanation in cur.fetchall()
+                }
     except db.DatabaseNotReady as exc:
         return jsonify(
             ServiceUnavailable(error=str(exc), hint=db.readiness_hint()).model_dump()
@@ -220,13 +223,14 @@ def check_answer():
 
     results = []
     for item in body.answers:
-        correct = correct_by_qid.get(item.qid)
+        correct, explanation = correct_by_qid.get(item.qid, (None, ""))
         results.append(
             AnswerCheckResult(
                 qid=item.qid,
                 chosen_answer=item.answer,
                 correct_answer=correct,
                 is_correct=_is_correct(item.answer, correct),
+                explanation=explanation,
             )
         )
 

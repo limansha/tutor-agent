@@ -150,12 +150,12 @@ class Question(BaseModel):
     question_text: str
     options: dict[str, str]
     answer: str
-    has_answer_in_doc: bool = False
+    explanation: str = ""
     question_topics: list[str] = Field(default_factory=list)
-    prerequisites: dict = Field(default_factory=dict)
     pdf_name: str
     source_path: str
     page_number: int
+    llm_model_used: str | None = None
 
 
 class TopicMatch(BaseModel):
@@ -201,6 +201,7 @@ class AnswerCheckResult(BaseModel):
     chosen_answer: str | None = None
     correct_answer: str | None = None
     is_correct: bool = False
+    explanation: str = ""
 
 
 class AnswerCheckResponse(BaseModel):

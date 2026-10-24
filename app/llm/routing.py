@@ -8,7 +8,7 @@ binding across providers. Hence a runner, not a fused model.
 A provider that returns 429 is benched in a small cache until its next-available
 time (its Retry-After, else _DEFAULT_COOLDOWN). The next call promotes the next
 provider to primary; when several are available the canonical order
-(OpenRouter -> Groq -> Gemini) holds. A benched provider is still tried last, so
+    (Groq -> OpenRouter -> Gemini -> Ollama) holds. A benched provider is still tried last, so
 a wrongly-guessed cooldown can't lock it out for good — and a success clears it.
 """
 
@@ -63,10 +63,10 @@ def _clear(spec: LLMSpec) -> None:
         _cooldown_until.pop(_key(spec), None)
 
 
-def _ordered_chain() -> list[LLMSpec]:
+def _ordered_chain(chain_fn: Callable[[], list[LLMSpec]]) -> list[LLMSpec]:
     """Available providers first (canonical order), then the benched ones."""
     now = time.monotonic()
-    chain = provider_specs()
+    chain = chain_fn()
     return [s for s in chain if _available(s, now)] + [
         s for s in chain if not _available(s, now)
     ]
@@ -75,6 +75,7 @@ def _ordered_chain() -> list[LLMSpec]:
 def with_llm_fallback(
     call: Callable[[LLMSpec], Any],
     retry_on: tuple[type[BaseException], ...] = (),
+    chain_fn: Callable[[], list[LLMSpec]] = provider_specs,
 ) -> Any:
     """Run `call(spec)` down the rotation until one succeeds.
 
@@ -86,10 +87,10 @@ def with_llm_fallback(
     """
     retriable = (APIError, *retry_on)
     last_error: BaseException | None = None
-    chain = _ordered_chain()
+    chain = _ordered_chain(chain_fn)
     if not chain:
         raise RuntimeError(
-            "no LLM configured — set OPENROUTER_API_KEY or a provider key in .env"
+            "no LLM configured — set a provider key in .env or run Ollama locally"
         )
     for spec in chain:
         attempts = 1 + (_402_RETRIES if spec == chain[0] else 0)

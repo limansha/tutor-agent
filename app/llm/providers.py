@@ -15,6 +15,7 @@ from app.config import config
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+OLLAMA_BASE_URL = "http://localhost:11434/v1"
 
 
 @dataclass(frozen=True)
@@ -26,22 +27,39 @@ class LLMSpec:
     api_key: str
 
 
-def provider_specs() -> list[LLMSpec]:
-    """Ordered, de-duplicated chain: OpenRouter primary, then Groq -> Gemini.
+_PROVIDER_ORDER = ("groq", "openrouter", "gemini", "ollama")
 
-    A provider with a blank key is skipped, so the chain degrades to whatever is
-    configured. The cross-provider hops have independent quotas, which is what
-    lets the app survive OpenRouter's account-wide free-model daily cap (429).
-    """
-    specs: list[LLMSpec] = []
-    if config.OPENROUTER_API_KEY:
-        specs.append(
-            LLMSpec(config.OPENROUTER_MODEL, OPENROUTER_BASE_URL, config.OPENROUTER_API_KEY)
-        )
-    for key, model, base in (
-        (config.GROQ_API_KEY, config.GROQ_MODEL, GROQ_BASE_URL),
-        (config.GEMINI_API_KEY, config.GEMINI_MODEL, GEMINI_BASE_URL),
-    ):
-        if key and model:
+
+def _ordered_specs(
+    order: tuple[str, ...], model_overrides: dict[str, str] | None = None
+) -> list[LLMSpec]:
+    providers = {
+        "openrouter": (OPENROUTER_BASE_URL, config.OPENROUTER_API_KEY, config.OPENROUTER_MODEL),
+        "groq": (GROQ_BASE_URL, config.GROQ_API_KEY, config.GROQ_MODEL),
+        "gemini": (GEMINI_BASE_URL, config.GEMINI_API_KEY, config.GEMINI_MODEL),
+        # Ollama ignores the key; the placeholder keeps the OpenAI client happy.
+        "ollama": (OLLAMA_BASE_URL, "ollama", config.OLLAMA_MODEL),
+    }
+    model_overrides = model_overrides or {}
+    specs = []
+    for name in order:
+        base, key, model = providers[name]
+        model = model_overrides.get(name, model)
+        if (key or name == "ollama") and model:
             specs.append(LLMSpec(model, base, key))
     return list(dict.fromkeys(specs))
+
+
+def provider_specs() -> list[LLMSpec]:
+    """Common ordered chain: Groq -> OpenRouter -> Gemini -> local Ollama.
+
+    A provider with a blank key is skipped, except for local Ollama, which needs
+    no key and is always the final fallback.
+    """
+    return _ordered_specs(_PROVIDER_ORDER)
+
+
+def ingest_provider_specs() -> list[LLMSpec]:
+    """Use the common provider chain with an optional ingestion Groq model override."""
+    overrides = {"groq": config.INGEST_MODEL} if config.INGEST_MODEL else None
+    return _ordered_specs(_PROVIDER_ORDER, overrides)

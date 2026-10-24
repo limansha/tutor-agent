@@ -38,6 +38,7 @@ class Config:
     GROQ_MODEL: str = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b").strip()
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "").strip()
     GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip()
+    OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "qwen3.5:9b").strip()
 
     EMBEDDING_MODEL: str = os.getenv(
         "EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"
@@ -54,6 +55,30 @@ class Config:
     QUESTIONS_JSON_DIR: str = os.getenv(
         "QUESTIONS_JSON_DIR", str(BASE_DIR / "questions_dump")
     ).strip()
+    QUESTIONS_PARSED_DIR: str = os.getenv(
+        "QUESTIONS_PARSED_DIR", str(BASE_DIR / "questions_dump" / "parsed_text_files")
+    ).strip()
+    QUESTIONS_ANNOTATED_DIR: str = os.getenv(
+        "QUESTIONS_ANNOTATED_DIR", str(BASE_DIR / "questions_dump" / "annotated_text_files")
+    ).strip()
+    QUESTIONS_JSON_FILES_DIR: str = os.getenv(
+        "QUESTIONS_JSON_FILES_DIR", str(BASE_DIR / "questions_dump" / "json_files")
+    ).strip()
+    QUESTIONS_FAILED_JSON_DIR: str = os.getenv(
+        "QUESTIONS_FAILED_JSON_DIR", str(BASE_DIR / "questions_dump" / "failed_json_files")
+    ).strip()
+    QUESTIONS_FAILED_RESPONSES_DIR: str = os.getenv(
+        "QUESTIONS_FAILED_RESPONSES_DIR",
+        str(BASE_DIR / "questions_dump" / "failed_responses"),
+    ).strip()
+    # Question-ingestion LLM settings (kept separate from the MCQ answer path).
+    INGEST_MODEL: str = os.getenv("INGEST_MODEL", "").strip()
+    INGEST_TEMPERATURE: float = float(os.getenv("INGEST_TEMPERATURE", "0"))
+    INGEST_MAX_TOKENS: int = int(os.getenv("INGEST_MAX_TOKENS", "1500"))
+    INGEST_EXPLANATION_WORDS: int = min(
+        int(os.getenv("INGEST_EXPLANATION_WORDS", "150")), 150
+    )
+    INGEST_REQUEST_TIMEOUT: int = int(os.getenv("INGEST_REQUEST_TIMEOUT", "60"))
 
     CHILD_WINDOW_SENTENCES: int = int(os.getenv("CHILD_WINDOW_SENTENCES", "4"))
     CHILD_SLIDE_SENTENCES: int = int(os.getenv("CHILD_SLIDE_SENTENCES", "2"))

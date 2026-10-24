@@ -1,6 +1,5 @@
-# RAG tutor-agent — commands to run the DB operations after code generation.
+# RAG tutor-agent commands.
 # Usage: make env && make deps && make db-setup && make ingest && make run
-# Reset: make reset && make ingest
 
 SHELL := /bin/bash
 QUERY ?= What is credit risk?
@@ -9,17 +8,17 @@ OPTIONS ?= {"A":"Risk that a counterparty fails to meet its contractual obligati
 BOOKS_DIR ?=
 QUESTIONS_DIR ?=
 FORCE_REINGEST ?=
-DUMP ?= frm_data.dump
-# Prefix for Render targets: forces the run-time DATABASE_URL (external) over the
-# local one in .env. The PIPENV_DONT_LOAD_ENV is REQUIRED — pipenv otherwise loads
-# .env and wins. Never stores the URL anywhere.
-TARGET_DB = PIPENV_DONT_LOAD_ENV=1 DATABASE_URL="$(DATABASE_URL)"
 TOPICS ?= ["Futures and Forwards", "Credit Risk", "Option Pricing"]
 SEARCH_TOPICS ?= []
 PAGE ?= 1
 PAGE_SIZE ?= 10
 -include .env
-.PHONY: env deps db-setup reset ingest ingest-questions ingest-questions-store ingest-questions-render restore-render _require-db-url dump restore run stop mcq-answer retrieve questions health ui
+.PHONY: env deps db-setup reset ingest ingest-questions-json ingest-questions-store run stop mcq-answer retrieve questions health ui
+
+# Copy .env.example -> .env (never overwrite an existing .env)
+env:
+	@test -f .env || cp .env.example .env
+	@echo ".env ready (edit it and set DATABASE_URL / OPENROUTER_API_KEY)"
 
 s:
 	pipenv shell
@@ -28,12 +27,6 @@ r:
 	pipenv install --verbose
 	pipenv lock
 	pipenv requirements > requirements.txt
-
-# Copy .env.example -> .env (never overwrite an existing .env)
-env:
-	@test -f .env || cp .env.example .env
-	@echo ".env ready (edit it and set DATABASE_URL / OPENROUTER_API_KEY)"
-
 
 # Create the pgvector schema (frm_books + question tables) using DATABASE_URL
 db-setup:
@@ -47,47 +40,15 @@ reset:
 ingest:
 	pipenv run python scripts/ingest.py --books-dir "$(BOOKS_DIR)" $(FORCE_REINGEST)
 
-# Parse -> extract questions -> LLM -> store in frm_questions
-ingest-questions:
-	pipenv run python scripts/ingest_questions.py --books-dir "$(QUESTIONS_DIR)"
+# Explicit name for PDF directory -> JSON-only ingestion.
+# Usage: make ingest-questions-json QUESTIONS_DIR=/path/to/pdf-directory
+ingest-questions-json:
+	@test -d "$(QUESTIONS_DIR)" || { echo "ERROR: QUESTIONS_DIR must be an existing PDF directory"; exit 1; }
+	pipenv run python scripts/ingest_questions.py --phase 1 --books-dir "$(QUESTIONS_DIR)"
 
-# Load questions_*.json into frm_questions
+# Independently load successful question JSON files into frm_questions
 ingest-questions-store:
-	pipenv run python scripts/ingest_questions.py --phase store $(FORCE_REINGEST)
-
-# Extract questions from QUESTIONS_DIR into questions_dump/*.json AND load them
-# into DATABASE_URL. For Render, pass its EXTERNAL url at run time (never commit):
-#   make ingest-questions-render DATABASE_URL="postgresql://...external..."
-ingest-questions-render: _require-db-url
-	$(TARGET_DB) pipenv run python scripts/ingest_questions.py --books-dir "$(QUESTIONS_DIR)"
-	$(TARGET_DB) pipenv run python scripts/ingest_questions.py --phase store $(FORCE_REINGEST)
-
-# One command to rebuild a fresh Render DB after the free 30-day expiry:
-# applies the schema (drops+recreates frm_questions) then loads questions_dump/*.json.
-#   make restore-render DATABASE_URL="postgresql://...external..."
-restore-render: _require-db-url
-	$(TARGET_DB) pipenv run python scripts/db_setup.py
-	$(TARGET_DB) pipenv run python scripts/ingest_questions.py --phase store
-
-# Guard: refuse to run Render targets unless DATABASE_URL came from the command
-# line, so the local URL in .env is never silently targeted.
-_require-db-url:
-	@test "$(origin DATABASE_URL)" = "command line" || { \
-		echo "ERROR: pass DATABASE_URL=<render external url> on the command line (do NOT commit it)."; \
-		exit 1; }
-
-# Back up the DB to a custom-format pg_dump file. Point at Render's EXTERNAL URL:
-#   make dump DATABASE_URL="postgresql://...external..."
-# Command-line DATABASE_URL overrides `-include .env` (no PIPENV_DONT_LOAD_ENV needed;
-# pg_dump is not run through pipenv).
-dump:
-	pg_dump "$(DATABASE_URL)" -Fc -f "$(DUMP)"
-	@echo "wrote $(DUMP)"
-
-# Restore a dump into DATABASE_URL. Run `make db-setup` first (dump is data-only).
-#   make restore DATABASE_URL="..." DUMP=frm_data.dump
-restore:
-	pg_restore --no-owner --data-only -d "$(DATABASE_URL)" "$(DUMP)"
+	pipenv run python scripts/store_questions.py
 
 # Start the Flask server (foreground; stops any stale server first)
 run: stop
@@ -124,4 +85,3 @@ health:
 # Streamlit UI (backend must already be running via `make run`)
 ui:
 	pipenv run streamlit run streamlit_app.py
-

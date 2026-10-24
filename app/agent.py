@@ -1,17 +1,21 @@
-"""MCQ answer: one DuckDuckGo search + one structured LLM call (no agent loop).
+"""MCQ answer: one DuckDuckGo search + one plain-text LLM call (no agent loop).
 
 The search runs once per request (keyless DDG-Lite scrape — see app/websearch.py),
-its excerpts are pasted into the prompt, and a single `with_structured_output`
-call returns an MCQAnswer. Dropping `create_agent`/tools removes every
+its excerpts are pasted into the prompt, and Python builds the MCQAnswer from
+a small plain-text response contract. Dropping `create_agent`/tools removes every
 tool-calling failure mode seen when switching models: Gemini's thought_signature
 400 on the tool round-trip, gpt-oss mis-calling tool args, and the
 response_format + tool-calling conflict behind the old ToolStrategy workaround.
 A parse failure on one provider now fails over to the next, like an API error.
 
-Model routing (OpenRouter primary -> Groq -> Gemini) is shared in
+Model routing (Groq primary -> OpenRouter -> Gemini) is shared in
 app/llm.with_llm_fallback."""
 
 from __future__ import annotations
+
+import logging
+import re
+import time
 
 from langchain_core.exceptions import OutputParserException
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -22,9 +26,12 @@ from app.prompts import render
 from app.schemas import ChunkMetadata, MCQAnswer, SourceChunk
 from app import websearch
 
+logger = logging.getLogger(__name__)
+
 _SYSTEM_PROMPT = render("mcq_web.j2")
 
 _MAX_SOURCE_CHARS = 1200
+_MAX_EXPLANATION_WORDS = 200
 
 
 def _result_sources(
@@ -69,15 +76,59 @@ def _answer_once(
     options: dict[str, str],
     excerpts: str,
 ) -> MCQAnswer:
-    """One structured call on one model; raises APIError/OutputParserException."""
+    """Call one model and build the response schema in Python."""
     option_block = "\n".join(f"{label}. {text}" for label, text in options.items())
     prompt = (
         f"Web search excerpts:\n{excerpts}\n\n"
         f"{question}\n\nOptions:\n{option_block}"
     )
-    structured = get_llm(spec).with_structured_output(MCQAnswer)
-    return structured.invoke(
+    response = get_llm(spec).invoke(
         [SystemMessage(content=_SYSTEM_PROMPT), HumanMessage(content=prompt)]
+    )
+    content = response.content
+    if not isinstance(content, str):
+        raise OutputParserException("LLM response was not plain text")
+
+    answer_match = re.search(
+        r"^ANSWER:\s*([A-Za-z0-9]+)\s*$", content, re.MULTILINE | re.IGNORECASE
+    )
+    explanation_match = re.search(
+        r"^EXPLANATION:\s*(.*?)(?=^REJECTIONS:\s*$|\Z)",
+        content,
+        re.MULTILINE | re.IGNORECASE | re.DOTALL,
+    )
+    rejections_match = re.search(
+        r"^REJECTIONS:\s*$\n?(.*)\Z", content, re.MULTILINE | re.IGNORECASE | re.DOTALL
+    )
+    if not (answer_match and explanation_match and rejections_match):
+        raise OutputParserException("LLM response did not follow the plain-text answer format")
+
+    label = answer_match.group(1).upper()
+    normalized_options = {key.upper(): value for key, value in options.items()}
+    if label not in normalized_options:
+        raise OutputParserException(f"LLM selected unknown option: {label}")
+
+    explanation = " ".join(explanation_match.group(1).split()[:_MAX_EXPLANATION_WORDS])
+    reasons: dict[str, str] = {}
+    for match in re.finditer(
+        r"^([A-Za-z0-9]+):\s*(.+?)(?=^\s*[A-Za-z0-9]+:\s*|\Z)",
+        rejections_match.group(1),
+        re.MULTILINE | re.DOTALL,
+    ):
+        reasons[match.group(1).upper()] = " ".join(match.group(2).split())
+    missing = set(normalized_options) - {label} - set(reasons)
+    if missing or not explanation:
+        raise OutputParserException("LLM response omitted an option rejection or explanation")
+
+    return MCQAnswer(
+        selected_option_label=label,
+        selected_option_text=normalized_options[label],
+        explanation=explanation,
+        rejections=[
+            {"option_label": key, "option_text": text, "reason": reasons[key]}
+            for key, text in normalized_options.items()
+            if key != label
+        ],
     )
 
 
@@ -88,12 +139,42 @@ def answer_mcq(
     """Search once, then answer; returns (MCQAnswer, web sources, winning spec)."""
     if not options:
         raise ValueError("options must not be empty")
+    t_total = time.monotonic()
+    t_search = time.monotonic()
     excerpts, sources = _search(question)
+    logger.info(
+        "mcq-answer: websearch took %.3fs, sources=%d",
+        time.monotonic() - t_search,
+        len(sources),
+    )
     winner: list[LLMSpec] = []
 
     def _run(spec: LLMSpec) -> MCQAnswer:
         winner.append(spec)
-        return _answer_once(spec, question, options, excerpts)
+        t_llm = time.monotonic()
+        try:
+            res = _answer_once(spec, question, options, excerpts)
+            logger.info(
+                "mcq-answer: provider %s@%s succeeded in %.3fs",
+                spec.model,
+                spec.base_url,
+                time.monotonic() - t_llm,
+            )
+            return res
+        except Exception:
+            logger.info(
+                "mcq-answer: provider %s@%s failed after %.3fs",
+                spec.model,
+                spec.base_url,
+                time.monotonic() - t_llm,
+            )
+            raise
 
     answer = with_llm_fallback(_run, retry_on=(OutputParserException,))
+    logger.info(
+        "mcq-answer: total took %.3fs, winner=%s@%s",
+        time.monotonic() - t_total,
+        winner[-1].model,
+        winner[-1].base_url,
+    )
     return answer, sources, winner[-1]
