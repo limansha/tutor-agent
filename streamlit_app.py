@@ -264,20 +264,29 @@ def call(path: str, *, timeout: int = 180, **payload) -> dict:
     return body
 
 
+def remember_answer(qid: int) -> None:
+    st.session_state.answers[qid] = st.session_state.get(f"choice_{qid}")
+
+
 def render_question(q: dict) -> None:
     qid = q["qid"]
     with st.expander(q["question_text"], expanded=True):
+        st.session_state.setdefault("answers", {})
+        st.session_state.setdefault(f"choice_{qid}", st.session_state.answers.get(qid))
         st.radio(
             "Choose an option",
             options=list(q["options"].keys()),
             format_func=lambda label: f"{label}. {q['options'][label]}",
             key=f"choice_{qid}",
             index=None,
+            on_change=remember_answer,
+            args=(qid,),
             label_visibility="collapsed",
         )
 
         checked = st.session_state.checks.get(qid)
-        if checked and checked["submitted"] == st.session_state.get(f"choice_{qid}"):
+        selected = st.session_state.answers.get(qid)
+        if checked and checked["submitted"] == selected:
             correct_answer = checked.get("correct_answer") or ""
             explanation = checked.get("explanation") or ""
             if not correct_answer and not explanation:
@@ -303,7 +312,7 @@ def batch_as_markdown(questions: list[dict], checks: dict) -> str:
     for number, question in enumerate(questions, start=1):
         qid = question["qid"]
         checked = checks.get(qid, {})
-        selected = st.session_state.get(f"choice_{qid}")
+        selected = st.session_state.answers.get(qid)
         correct = checked.get("correct_answer") or question.get("answer", "")
         result = (
             "Correct"
@@ -351,7 +360,7 @@ def confirm_load_next_batch() -> None:
         mime="text/markdown",
         use_container_width=True,
     )
-    if st.button("Load next batch", type="primary", use_container_width=True):
+    if st.button("Yes, load next batch", type="primary", use_container_width=True):
         st.session_state.load_next_batch_confirmed = True
         st.rerun()
 
@@ -359,6 +368,7 @@ def confirm_load_next_batch() -> None:
 def main() -> None:
     st.title("FRM MCQ Practice")
     st.session_state.setdefault("explanations", {})
+    st.session_state.setdefault("answers", {})
 
     with st.sidebar:
         st.header("Topics")
@@ -403,6 +413,7 @@ def main() -> None:
                 st.session_state.page = 0
                 st.session_state.checks = {}
                 st.session_state.explanations = {}
+                st.session_state.answers = {}
                 if data.get("uncovered_topics"):
                     st.warning(
                         "No questions found for: "
@@ -435,10 +446,9 @@ def main() -> None:
     for q in page_qs:
         render_question(q)
 
-    if page >= page_count - 1 and st.session_state.get("has_more") and st.button(
-        "Load next batch", type="primary", use_container_width=True
-    ):
-        confirm_load_next_batch()
+    if page >= page_count - 1 and st.session_state.get("has_more"):
+        if st.button("Load more questions", use_container_width=True):
+            confirm_load_next_batch()
 
     if st.session_state.pop("load_next_batch_confirmed", False):
         try:
@@ -458,11 +468,12 @@ def main() -> None:
             st.session_state.page = 0
             st.session_state.checks = {}
             st.session_state.explanations = {}
+            st.session_state.answers = {}
             st.rerun()
 
     if st.button("Check Answers", type="primary", use_container_width=True):
         payload = [
-            {"qid": q["qid"], "answer": st.session_state.get(f"choice_{q['qid']}")}
+            {"qid": q["qid"], "answer": st.session_state.answers.get(q["qid"])}
             for q in page_qs
         ]
         try:
@@ -474,7 +485,7 @@ def main() -> None:
             st.session_state.checks.update(
                 {
                     r["qid"]: {
-                        "submitted": st.session_state.get(f"choice_{r['qid']}"),
+                        "submitted": st.session_state.answers.get(r["qid"]),
                         "chosen": r["chosen_answer"],
                         "is_correct": r["is_correct"],
                         "correct_answer": r["correct_answer"],
