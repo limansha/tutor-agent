@@ -479,16 +479,6 @@ def _store_questions(questions: list[dict]) -> None:
         conn.close()
 
 
-def _pdf_already_stored(pdf_name: str) -> bool:
-    conn = db.connect()
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT EXISTS(SELECT 1 FROM frm_questions WHERE pdf_name = %s)", (pdf_name,))
-            return cur.fetchone()[0]
-    finally:
-        conn.close()
-
-
 def ingest_questions(
     books_dir: str | None = None,
     batch_size: int = 1,
@@ -618,13 +608,6 @@ def store_questions_from_json(json_dir: str | None = None) -> dict:
                 logger.warning(
                     f"  {json_path.name}: dropping {dropped} question(s) with null/empty question_text"
                 )
-            pdf_name = valid[0].get("pdf_name", "") if valid else ""
-            if pdf_name and _pdf_already_stored(pdf_name):
-                elapsed = time.monotonic() - file_start
-                skipped += 1
-                logger.info(f"  - {json_path.name}: {pdf_name} already in DB, skipped "
-                            f"in {elapsed:.1f}s")
-                continue
             _store_questions(valid)
             elapsed = time.monotonic() - file_start
             processed += 1
