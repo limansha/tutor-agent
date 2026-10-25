@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from langchain.chat_models import init_chat_model
+from langchain_openai import ChatOpenAI
 
 from app.config import config
 from app.llm.providers import LLMSpec, gemini_spec
@@ -29,9 +29,8 @@ def get_llm(
         raise ValueError(f"unknown LLM purpose: {purpose}")
 
     spec = spec if isinstance(spec, LLMSpec) else gemini_spec()
-    return init_chat_model(
+    return ChatOpenAI(
         model=spec.model,
-        model_provider="openai",
         temperature=temperature,
         max_tokens=max_tokens,
         api_key=spec.api_key,
