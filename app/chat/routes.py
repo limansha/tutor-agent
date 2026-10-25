@@ -36,7 +36,7 @@ def chat():
         return jsonify(
             ServiceUnavailable(
                 error=str(exc),
-                hint="Set a Groq or Gemini provider key, then restart.",
+                hint="Set GEMINI_API_KEY, then restart.",
             ).model_dump()
         ), 503
 

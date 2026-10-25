@@ -19,7 +19,7 @@ BACKFILL_LIMIT ?= 3
 # Copy .env.example -> .env (never overwrite an existing .env)
 env:
 	@test -f .env || cp .env.example .env
-	@echo ".env ready (edit it and set DATABASE_URL / an LLM provider key)"
+	@echo ".env ready (edit it and set DATABASE_URL / GEMINI_API_KEY)"
 
 s:
 	pipenv shell
@@ -56,8 +56,7 @@ ingest-questions-store:
 backfill-question-metadata:
 	pipenv run python scripts/backfill_question_metadata.py --limit $(BACKFILL_LIMIT)
 
-# Run the backfill every five minutes, three questions per cycle, rotating
-# through the configured Groq and Gemini providers.
+# Run the backfill every three minutes, three questions per cycle, using Gemini.
 schedule-backfill:
 	pipenv run python scripts/schedule_backfill.py
 

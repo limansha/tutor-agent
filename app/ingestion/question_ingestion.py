@@ -11,7 +11,7 @@ from pypdf import PdfReader
 from app import db
 from app.config import config
 from app.embeddings import embed_documents
-from app.llm import LLMSpec, get_llm, ingest_provider_specs
+from app.llm import gemini_spec, get_llm
 from app.prompts import render
 
 logger = logging.getLogger(__name__)
@@ -23,10 +23,10 @@ _SYSTEM_PROMPT = render(
 )
 
 
-@lru_cache(maxsize=8)
-def _get_ingest_llm(spec: LLMSpec):
-    """Cached client per provider so batches reuse connections/TLS."""
-    return get_llm(spec, purpose="ingest")
+@lru_cache(maxsize=1)
+def _get_ingest_llm():
+    """Cache the Gemini client so batches reuse connections/TLS."""
+    return get_llm(gemini_spec(), purpose="ingest")
 
 
 def _clean_text(text: str) -> str:
@@ -246,7 +246,6 @@ def _process_batch(
     start_idx: int,
     end_idx: int,
     label: str,
-    spec: LLMSpec | None,
 ) -> tuple[list[dict] | None, dict, str]:
     """Run one batch through the LLM. Returns (items, bench_record, raw_resp)."""
     logger.info(
@@ -268,11 +267,9 @@ def _process_batch(
         "batch_size": len(batch),
         "question_ids": [b["id"] for b in batch],
     }
-    model = f"{spec.model}@{spec.base_url}" if spec else ""
+    model = f"{config.GEMINI_MODEL}@gemini"
     try:
-        if spec is None:
-            raise RuntimeError("no ingestion LLM configured")
-        response = _get_ingest_llm(spec).invoke(
+        response = _get_ingest_llm().invoke(
             [SystemMessage(content=_SYSTEM_PROMPT), HumanMessage(content=prompt)]
         )
         record["model"] = model
@@ -346,8 +343,6 @@ def process_one_pdf(
     total = len(blocks)
     if batch_size != 1:
         raise ValueError("question ingestion requires batch_size=1")
-    specs = ingest_provider_specs()
-    primary_spec = specs[0] if specs else None
     logger.info(
         "[document] %s prepared: %d question blocks, %d batches, output=%s",
         pdf_path.name,
@@ -389,7 +384,7 @@ def process_one_pdf(
 
     for bn, s, e, batch in batches:
         items, record, _ = _process_batch(
-            pdf_path, stem, batch, bn, s, e, label, primary_spec
+            pdf_path, stem, batch, bn, s, e, label
         )
         _commit(bn, items)
 
@@ -476,15 +471,10 @@ def _store_questions(questions: list[dict]) -> None:
 
 def backfill_question_metadata(
     limit: int | None = None,
-    provider_specs: list[LLMSpec] | None = None,
-    provider_index: int = 0,
 ) -> dict:
     """Fill answer metadata for rows whose extraction call previously failed."""
     if not db.is_ready():
         raise db.DatabaseNotReady(db.readiness_hint())
-    specs = provider_specs if provider_specs is not None else ingest_provider_specs()
-    if not specs:
-        raise RuntimeError("no ingestion LLM configured")
     query = """
         SELECT qid, question_text, options
         FROM frm_questions
@@ -503,10 +493,9 @@ def backfill_question_metadata(
         with conn.cursor() as cur:
             cur.execute(query, (limit,) if limit is not None else ())
             rows = cur.fetchall()
-            for row_index, (qid, question_text, options) in enumerate(rows):
+            for qid, question_text, options in rows:
                 processed += 1
-                spec = specs[(provider_index + row_index) % len(specs)]
-                model = f"{spec.model}@{spec.base_url}"
+                model = f"{config.GEMINI_MODEL}@gemini"
                 options = options or {}
                 option_text = "\n".join(f"{key}. {value}" for key, value in options.items())
                 prompt = render(
@@ -514,7 +503,7 @@ def backfill_question_metadata(
                     questions=[f"{question_text}\n{option_text}"],
                 )
                 try:
-                    response = _get_ingest_llm(spec).invoke(
+                    response = _get_ingest_llm().invoke(
                         [SystemMessage(content=_SYSTEM_PROMPT), HumanMessage(content=prompt)]
                     )
                     answer, explanation, topics = _parse_plain_response(
@@ -563,7 +552,6 @@ def backfill_question_metadata(
         "updated": updated,
         "failed": failed,
         "attempts": attempts,
-        "next_provider_index": (provider_index + processed) % len(specs),
     }
 
 
@@ -765,9 +753,7 @@ def process_parsed_text_to_json(parsed_path: Path, batch_size: int = 1) -> dict:
 
     if batch_size != 1:
         raise ValueError("question ingestion requires batch_size=1")
-    specs = ingest_provider_specs()
-    spec = specs[0] if specs else None
-    model = f"{spec.model}@{spec.base_url}" if spec else ""
+    model = f"{config.GEMINI_MODEL}@gemini"
 
     all_results = []
     for i in range(0, total, batch_size):
@@ -778,9 +764,7 @@ def process_parsed_text_to_json(parsed_path: Path, batch_size: int = 1) -> dict:
             questions=batch,
         )
         try:
-            if spec is None:
-                raise RuntimeError("no ingestion LLM configured")
-            response = _get_ingest_llm(spec).invoke(
+            response = _get_ingest_llm().invoke(
                 [SystemMessage(content=_SYSTEM_PROMPT), HumanMessage(content=prompt)]
             )
             resp_text = response.content if hasattr(response, "content") else str(response)

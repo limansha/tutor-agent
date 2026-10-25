@@ -41,7 +41,7 @@ services:
     envVars:
       - key: RUN_COMBINED
         value: "1"
-      # Paid always-on service also runs the three-question backfill every five minutes.
+      # Paid always-on service also runs the three-question backfill every three minutes.
       - key: RUN_BACKFILL_SCHEDULER
         value: "1"
       - key: DATABASE_URL
@@ -52,17 +52,13 @@ services:
         value: /books
       - key: QUESTIONS_DIR
         value: /books
-      # Prompted at sync time; set both provider keys for scheduler rotation.
-      - key: GROQ_API_KEY
-        sync: false
+      # Prompted at sync time; required for MCQ answers and backfill.
       - key: GEMINI_API_KEY
         sync: false
       - key: MCQ_TEMPERATURE
         value: "0.2"
       - key: MCQ_MAX_TOKENS
         value: "4000"
-      - key: GROQ_MODEL
-        value: openai/gpt-oss-20b
       - key: GEMINI_MODEL
         value: gemini-3.8-flash
 

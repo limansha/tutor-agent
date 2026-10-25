@@ -6,10 +6,7 @@ a small plain-text response contract. Dropping `create_agent`/tools removes ever
 tool-calling failure mode seen when switching models: Gemini's thought_signature
 400 on the tool round-trip, gpt-oss mis-calling tool args, and the
 response_format + tool-calling conflict behind the old ToolStrategy workaround.
-A parse failure on one provider now fails over to the next, like an API error.
-
-Model routing (Groq primary -> Gemini) is shared in
-app/llm.with_llm_fallback."""
+The configured Gemini model handles the single LLM call."""
 
 from __future__ import annotations
 
@@ -21,7 +18,7 @@ from langchain_core.exceptions import OutputParserException
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.config import config
-from app.llm import LLMSpec, get_llm, with_llm_fallback
+from app.llm import LLMSpec, gemini_spec, get_llm
 from app.prompts import render
 from app.schemas import ChunkMetadata, MCQAnswer, SourceChunk
 from app import websearch
@@ -147,34 +144,13 @@ def answer_mcq(
         time.monotonic() - t_search,
         len(sources),
     )
-    winner: list[LLMSpec] = []
-
-    def _run(spec: LLMSpec) -> MCQAnswer:
-        winner.append(spec)
-        t_llm = time.monotonic()
-        try:
-            res = _answer_once(spec, question, options, excerpts)
-            logger.info(
-                "mcq-answer: provider %s@%s succeeded in %.3fs",
-                spec.model,
-                spec.base_url,
-                time.monotonic() - t_llm,
-            )
-            return res
-        except Exception:
-            logger.info(
-                "mcq-answer: provider %s@%s failed after %.3fs",
-                spec.model,
-                spec.base_url,
-                time.monotonic() - t_llm,
-            )
-            raise
-
-    answer = with_llm_fallback(_run, retry_on=(OutputParserException,))
+    spec = gemini_spec()
+    t_llm = time.monotonic()
+    answer = _answer_once(spec, question, options, excerpts)
+    logger.info("mcq-answer: Gemini call took %.3fs", time.monotonic() - t_llm)
     logger.info(
-        "mcq-answer: total took %.3fs, winner=%s@%s",
+        "mcq-answer: total took %.3fs, model=%s",
         time.monotonic() - t_total,
-        winner[-1].model,
-        winner[-1].base_url,
+        spec.model,
     )
-    return answer, sources, winner[-1]
+    return answer, sources, spec

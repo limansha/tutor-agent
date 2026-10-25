@@ -21,13 +21,6 @@ class Config:
     MCQ_TEMPERATURE: float = float(os.getenv("MCQ_TEMPERATURE", "0.2"))
     MCQ_MAX_TOKENS: int = int(os.getenv("MCQ_MAX_TOKENS", "4000"))
 
-    # Cross-provider fallbacks (all OpenAI-compatible; a provider with a blank
-    # key is skipped). Independent quotas keep the answer path available.
-    # Best model per provider (quota is account-based, not model-wise, so use the
-    # strongest). Slugs drift — providers retire models (e.g. Groq killed
-    # llama-3.3-70b-versatile in Aug 2026); swap in .env when one 404s.
-    GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "").strip()
-    GROQ_MODEL: str = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b").strip()
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "").strip()
     GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip()
 
@@ -56,7 +49,6 @@ class Config:
         "QUESTIONS_JSON_FILES_DIR", str(BASE_DIR / "questions_dump" / "json_files")
     ).strip()
     # Question-ingestion LLM settings (kept separate from the MCQ answer path).
-    INGEST_MODEL: str = os.getenv("INGEST_MODEL", "").strip()
     INGEST_TEMPERATURE: float = float(os.getenv("INGEST_TEMPERATURE", "0"))
     INGEST_MAX_TOKENS: int = int(os.getenv("INGEST_MAX_TOKENS", "1500"))
     INGEST_EXPLANATION_WORDS: int = min(

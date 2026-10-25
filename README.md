@@ -94,8 +94,8 @@ matter most:
 | var | purpose |
 |---|---|
 | `DATABASE_URL` | Postgres + pgvector connection string (**required**) |
-| `GROQ_API_KEY` / `GEMINI_API_KEY` | LLM access — at least one is required for `/api/mcq-answer` and question extraction |
-| `GROQ_MODEL` / `GEMINI_MODEL` | Provider models used by the LLM routing chain |
+| `GEMINI_API_KEY` | Gemini access — required for `/api/mcq-answer` and question extraction |
+| `GEMINI_MODEL` | Gemini model used by all LLM calls |
 | `BOOKS_DIR` / `QUESTIONS_DIR` | where the source PDFs live (**not** in the repo) |
 | `EMBEDDING_MODEL` / `EMBEDDING_DIM` | must match `vector(384)` in the schema |
 | `MIN_CHUNK_TOKENS` / `PARENT_MAX_TOKENS` / `CHILD_*` | chunking budgets |
