@@ -452,7 +452,7 @@ def _store_questions(questions: list[dict]) -> None:
                         q.get("explanation", ""), q.get("question_topics", []),
                         q["pdf_name"], q.get("source_path", ""),
                         q.get("page_number", 0),
-                        q.get("llm_model_used", config.OPENROUTER_MODEL),
+                         q.get("llm_model_used", ""),
                     ),
                 )
                 inserted = cur.fetchone()

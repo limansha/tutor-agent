@@ -8,7 +8,7 @@ binding across providers. Hence a runner, not a fused model.
 A provider that returns 429 is benched in a small cache until its next-available
 time (its Retry-After, else _DEFAULT_COOLDOWN). The next call promotes the next
 provider to primary; when several are available the canonical order
-    (Groq -> OpenRouter -> Gemini) holds. A benched provider is still tried last, so
+    (Groq -> Gemini) holds. A benched provider is still tried last, so
 a wrongly-guessed cooldown can't lock it out for good — and a success clears it.
 """
 
@@ -105,7 +105,7 @@ def with_llm_fallback(
                 if status == 402:
                     wait = _retry_after_seconds(exc) or 5
                     logger.warning(
-                        "OpenRouter in-flight budget exhausted on %s; retry in %ss",
+                        "LLM in-flight budget exhausted on %s; retry in %ss",
                         spec.model,
                         wait,
                     )

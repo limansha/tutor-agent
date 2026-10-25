@@ -18,19 +18,11 @@ class Config:
     """Runtime configuration loaded from .env (documented in .env.example)."""
 
     DATABASE_URL: str = os.getenv("DATABASE_URL", "").strip()
-    OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "").strip()
-    # Best free model by default (quota is account-wide, so the largest model
-    # costs the same as the smallest): 550B/55B-active flagship, 1M ctx, tool
-    # calling. Set a paid slug once you buy credits.
-    OPENROUTER_MODEL: str = os.getenv(
-        "OPENROUTER_MODEL", "nvidia/nemotron-3-ultra-550b-a55b:free"
-    ).strip()
-    OPENROUTER_TEMPERATURE: float = float(os.getenv("OPENROUTER_TEMPERATURE", "0.2"))
-    OPENROUTER_MAX_TOKENS: int = int(os.getenv("OPENROUTER_MAX_TOKENS", "4000"))
+    MCQ_TEMPERATURE: float = float(os.getenv("MCQ_TEMPERATURE", "0.2"))
+    MCQ_MAX_TOKENS: int = int(os.getenv("MCQ_MAX_TOKENS", "4000"))
 
-    # Cross-provider fallbacks (all OpenAI-compatible, tried in this order after
-    # the OpenRouter model; a provider with a blank key is skipped). Independent
-    # quotas, so they survive OpenRouter's account-wide free-model daily cap.
+    # Cross-provider fallbacks (all OpenAI-compatible; a provider with a blank
+    # key is skipped). Independent quotas keep the answer path available.
     # Best model per provider (quota is account-based, not model-wise, so use the
     # strongest). Slugs drift — providers retire models (e.g. Groq killed
     # llama-3.3-70b-versatile in Aug 2026); swap in .env when one 404s.

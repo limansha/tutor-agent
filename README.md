@@ -63,7 +63,7 @@ Requires Python 3.12, [pipenv](https://pipenv.pypa.io/), and a running Postgres 
 
 ```bash
 make env        # copy .env.example -> .env
-$EDITOR .env    # set DATABASE_URL, OPENROUTER_API_KEY, BOOKS_DIR
+$EDITOR .env    # set DATABASE_URL, a provider API key, and BOOKS_DIR
 make deps       # pipenv install
 make db-setup   # create schema
 make ingest     # parse -> chunk -> embed -> store  (slow first run: downloads the model)
@@ -94,8 +94,8 @@ matter most:
 | var | purpose |
 |---|---|
 | `DATABASE_URL` | Postgres + pgvector connection string (**required**) |
-| `OPENROUTER_API_KEY` | LLM access — required for `/api/mcq-answer` and question extraction; `/api/retrieve` works without it |
-| `OPENROUTER_MODEL` / `_FALLBACK_MODELS` | primary model, then a comma-separated fallback list tried in order if it errors |
+| `GROQ_API_KEY` / `GEMINI_API_KEY` | LLM access — at least one is required for `/api/mcq-answer` and question extraction |
+| `GROQ_MODEL` / `GEMINI_MODEL` | Provider models used by the LLM routing chain |
 | `BOOKS_DIR` / `QUESTIONS_DIR` | where the source PDFs live (**not** in the repo) |
 | `EMBEDDING_MODEL` / `EMBEDDING_DIM` | must match `vector(384)` in the schema |
 | `MIN_CHUNK_TOKENS` / `PARENT_MAX_TOKENS` / `CHILD_*` | chunking budgets |

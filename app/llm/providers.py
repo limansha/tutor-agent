@@ -12,7 +12,6 @@ from dataclasses import dataclass
 
 from app.config import config
 
-OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
@@ -26,14 +25,13 @@ class LLMSpec:
     api_key: str
 
 
-_PROVIDER_ORDER = ("groq", "openrouter", "gemini")
+_PROVIDER_ORDER = ("groq", "gemini")
 
 
 def _ordered_specs(
     order: tuple[str, ...], model_overrides: dict[str, str] | None = None
 ) -> list[LLMSpec]:
     providers = {
-        "openrouter": (OPENROUTER_BASE_URL, config.OPENROUTER_API_KEY, config.OPENROUTER_MODEL),
         "groq": (GROQ_BASE_URL, config.GROQ_API_KEY, config.GROQ_MODEL),
         "gemini": (GEMINI_BASE_URL, config.GEMINI_API_KEY, config.GEMINI_MODEL),
     }
@@ -48,7 +46,7 @@ def _ordered_specs(
 
 
 def provider_specs() -> list[LLMSpec]:
-    """Common ordered chain: Groq -> OpenRouter -> Gemini.
+    """Common ordered chain: Groq -> Gemini.
 
     A provider with a blank key is skipped.
     """

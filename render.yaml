@@ -48,33 +48,21 @@ services:
         fromDatabase:
           name: tutor-agent-db
           property: connectionString
-      # Prompted at sync time; required for /api/mcq-answer (retrieval works without).
-      - key: OPENROUTER_API_KEY
-        sync: false
       - key: BOOKS_DIR
         value: /books
       - key: QUESTIONS_DIR
         value: /books
-      # Hosted corpus is questions-only, so /api/mcq-answer searches the web
-      # instead of frm_books. Free models keep it on the free tier; swap to
-      # paid slugs once credits exist (OPENROUTER_MODEL=openai/gpt-oss-20b).
-      - key: OPENROUTER_MODEL
-        value: nvidia/nemotron-3-ultra-550b-a55b:free
-      # Tuning knobs, exposed so they can be changed from the dashboard without a
-      # redeploy. TEMPERATURE 0.2 keeps answers stable; MAX_TOKENS caps request
-      # size (hence credit cost) and bounds the final structured answer.
-      - key: OPENROUTER_TEMPERATURE
-        value: "0.2"
-      - key: OPENROUTER_MAX_TOKENS
-        value: "4000"
-      # Optional cross-provider fallbacks (app/llm/): independent quotas so an
-      # OpenRouter 429 doesn't take the endpoint down. Leave blank to skip a hop.
+      # Prompted at sync time; set both provider keys for scheduler rotation.
       - key: GROQ_API_KEY
         sync: false
-      - key: GROQ_MODEL
-        value: openai/gpt-oss-20b
       - key: GEMINI_API_KEY
         sync: false
+      - key: MCQ_TEMPERATURE
+        value: "0.2"
+      - key: MCQ_MAX_TOKENS
+        value: "4000"
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-20b
       - key: GEMINI_MODEL
         value: gemini-3.8-flash
 

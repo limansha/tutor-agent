@@ -104,8 +104,8 @@ services:
       start_period: 30s
       retries: 3
 
-  # --- Optional: extract practice questions via the LLM and store them. Needs
-  # --- OPENROUTER_API_KEY. Off by default; run with:
+   # --- Optional: extract practice questions via the LLM and store them. Needs
+   # --- a configured Groq or Gemini API key. Off by default; run with:
   # ---   docker compose --profile questions run --rm questions
   questions:
     build: .

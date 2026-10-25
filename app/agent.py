@@ -8,7 +8,7 @@ tool-calling failure mode seen when switching models: Gemini's thought_signature
 response_format + tool-calling conflict behind the old ToolStrategy workaround.
 A parse failure on one provider now fails over to the next, like an API error.
 
-Model routing (Groq primary -> OpenRouter -> Gemini) is shared in
+Model routing (Groq primary -> Gemini) is shared in
 app/llm.with_llm_fallback."""
 
 from __future__ import annotations

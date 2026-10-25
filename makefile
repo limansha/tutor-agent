@@ -19,7 +19,7 @@ BACKFILL_LIMIT ?= 3
 # Copy .env.example -> .env (never overwrite an existing .env)
 env:
 	@test -f .env || cp .env.example .env
-	@echo ".env ready (edit it and set DATABASE_URL / OPENROUTER_API_KEY)"
+	@echo ".env ready (edit it and set DATABASE_URL / an LLM provider key)"
 
 s:
 	pipenv shell
@@ -57,7 +57,7 @@ backfill-question-metadata:
 	pipenv run python scripts/backfill_question_metadata.py --limit $(BACKFILL_LIMIT)
 
 # Run the backfill every five minutes, three questions per cycle, rotating
-# through the configured Groq, OpenRouter, and Gemini providers.
+# through the configured Groq and Gemini providers.
 schedule-backfill:
 	pipenv run python scripts/schedule_backfill.py
 
