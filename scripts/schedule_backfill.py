@@ -1,4 +1,4 @@
-"""Run Gemini question metadata backfill every three minutes."""
+"""Run Gemini question metadata backfill every five minutes."""
 
 from __future__ import annotations
 
@@ -18,14 +18,14 @@ from app.config import config  # noqa: E402
 from app.ingestion.question_ingestion import backfill_question_metadata  # noqa: E402
 
 
-INTERVAL_SECONDS = 3 * 60
+INTERVAL_SECONDS = 5 * 60
 BATCH_SIZE = 3
 
 
 def main() -> int:
     print(
         "Starting Gemini question metadata scheduler: "
-        f"3 questions every 3 minutes; key_configured={bool(config.GEMINI_API_KEY)}; "
+        f"3 questions every 5 minutes; key_configured={bool(config.GEMINI_API_KEY)}; "
         f"model={config.GEMINI_MODEL}",
         flush=True,
     )

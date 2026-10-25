@@ -56,7 +56,7 @@ ingest-questions-store:
 backfill-question-metadata:
 	pipenv run python scripts/backfill_question_metadata.py --limit $(BACKFILL_LIMIT)
 
-# Run the backfill every three minutes, three questions per cycle, using Gemini.
+# Run the backfill every five minutes, three questions per cycle, using Gemini.
 schedule-backfill:
 	pipenv run python scripts/schedule_backfill.py
 

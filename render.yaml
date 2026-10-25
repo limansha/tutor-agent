@@ -41,7 +41,7 @@ services:
     envVars:
       - key: RUN_COMBINED
         value: "1"
-      # Paid always-on service also runs the three-question backfill every three minutes.
+      # Paid always-on service also runs the three-question backfill every five minutes.
       - key: RUN_BACKFILL_SCHEDULER
         value: "1"
       - key: DATABASE_URL

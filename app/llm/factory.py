@@ -36,5 +36,5 @@ def get_llm(
         api_key=spec.api_key,
         base_url=spec.base_url,
         **({"timeout": timeout} if timeout is not None else {}),
-        **({"max_retries": 0} if purpose == "ingest" else {}),
+            **({"max_retries": 0} if purpose == "ingest" else {}),
     )
