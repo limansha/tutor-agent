@@ -15,7 +15,6 @@ from app.config import config
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
-OLLAMA_BASE_URL = "http://localhost:11434/v1"
 
 
 @dataclass(frozen=True)
@@ -27,7 +26,7 @@ class LLMSpec:
     api_key: str
 
 
-_PROVIDER_ORDER = ("groq", "openrouter", "gemini", "ollama")
+_PROVIDER_ORDER = ("groq", "openrouter", "gemini")
 
 
 def _ordered_specs(
@@ -37,24 +36,21 @@ def _ordered_specs(
         "openrouter": (OPENROUTER_BASE_URL, config.OPENROUTER_API_KEY, config.OPENROUTER_MODEL),
         "groq": (GROQ_BASE_URL, config.GROQ_API_KEY, config.GROQ_MODEL),
         "gemini": (GEMINI_BASE_URL, config.GEMINI_API_KEY, config.GEMINI_MODEL),
-        # Ollama ignores the key; the placeholder keeps the OpenAI client happy.
-        "ollama": (OLLAMA_BASE_URL, "ollama", config.OLLAMA_MODEL),
     }
     model_overrides = model_overrides or {}
     specs = []
     for name in order:
         base, key, model = providers[name]
         model = model_overrides.get(name, model)
-        if (key or name == "ollama") and model:
+        if key and model:
             specs.append(LLMSpec(model, base, key))
     return list(dict.fromkeys(specs))
 
 
 def provider_specs() -> list[LLMSpec]:
-    """Common ordered chain: Groq -> OpenRouter -> Gemini -> local Ollama.
+    """Common ordered chain: Groq -> OpenRouter -> Gemini.
 
-    A provider with a blank key is skipped, except for local Ollama, which needs
-    no key and is always the final fallback.
+    A provider with a blank key is skipped.
     """
     return _ordered_specs(_PROVIDER_ORDER)
 

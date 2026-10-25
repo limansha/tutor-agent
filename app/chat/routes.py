@@ -36,7 +36,7 @@ def chat():
         return jsonify(
             ServiceUnavailable(
                 error=str(exc),
-                hint="Set a provider key or run Ollama locally, then restart.",
+                hint="Set a Groq, OpenRouter, or Gemini provider key, then restart.",
             ).model_dump()
         ), 503
 

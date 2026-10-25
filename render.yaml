@@ -27,21 +27,22 @@
 # extracted. `make db-setup` re-drops frm_questions, so always run the store step after.)
 
 services:
-  # One combined service (free plan: one web service = half the instance-hour
-  # burn). RUN_COMBINED runs gunicorn on loopback + Streamlit on $PORT in the
-  # same container; the UI reaches the API at http://127.0.0.1:5000, so the API
-  # is NOT publicly callable — only the UI is.
+  # One combined paid always-on service. RUN_COMBINED runs gunicorn on loopback
+  # + Streamlit on $PORT in the same container; the UI reaches the API at
+  # http://127.0.0.1:5000, so the API is NOT publicly callable — only the UI is.
   - type: web
     runtime: docker
     name: tutor-agent-api
-    plan: free
+    plan: 0.5c-512mb
     healthCheckPath: /_stcore/health
-    # Free web services cannot attach a disk (and no other service can read one
-    # anyway), so GET /docs/<file> 404s — answers/citations still work, only the
-    # PDF links die. To restore them on a paid plan, add a `disk:` block here with
-    # mountPath /books and drop the PDFs in via the Render shell.
+    # No disk is attached, so GET /docs/<file> 404s — answers/citations still
+    # work, only the PDF links die. Add a `disk:` block with mountPath /books if
+    # hosted PDF links are needed.
     envVars:
       - key: RUN_COMBINED
+        value: "1"
+      # Paid always-on service also runs the three-question backfill every five minutes.
+      - key: RUN_BACKFILL_SCHEDULER
         value: "1"
       - key: DATABASE_URL
         fromDatabase:

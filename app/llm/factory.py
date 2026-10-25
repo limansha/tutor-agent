@@ -5,7 +5,7 @@ from __future__ import annotations
 from langchain.chat_models import init_chat_model
 
 from app.config import config
-from app.llm.providers import LLMSpec, OLLAMA_BASE_URL, OPENROUTER_BASE_URL
+from app.llm.providers import LLMSpec, OPENROUTER_BASE_URL
 
 
 def get_llm(
@@ -28,9 +28,6 @@ def get_llm(
         timeout = None
     else:
         raise ValueError(f"unknown LLM purpose: {purpose}")
-
-    if isinstance(spec, LLMSpec) and spec.base_url == OLLAMA_BASE_URL:
-        timeout = None
 
     if isinstance(spec, LLMSpec):
         return init_chat_model(

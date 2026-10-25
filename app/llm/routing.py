@@ -8,7 +8,7 @@ binding across providers. Hence a runner, not a fused model.
 A provider that returns 429 is benched in a small cache until its next-available
 time (its Retry-After, else _DEFAULT_COOLDOWN). The next call promotes the next
 provider to primary; when several are available the canonical order
-    (Groq -> OpenRouter -> Gemini -> Ollama) holds. A benched provider is still tried last, so
+    (Groq -> OpenRouter -> Gemini) holds. A benched provider is still tried last, so
 a wrongly-guessed cooldown can't lock it out for good — and a success clears it.
 """
 
@@ -90,7 +90,7 @@ def with_llm_fallback(
     chain = _ordered_chain(chain_fn)
     if not chain:
         raise RuntimeError(
-            "no LLM configured — set a provider key in .env or run Ollama locally"
+            "no LLM configured — set a provider key in .env"
         )
     for spec in chain:
         attempts = 1 + (_402_RETRIES if spec == chain[0] else 0)

@@ -246,7 +246,7 @@ def _process_batch(
     start_idx: int,
     end_idx: int,
     label: str,
-    spec: LLMSpec,
+    spec: LLMSpec | None,
 ) -> tuple[list[dict] | None, dict, str]:
     """Run one batch through the LLM. Returns (items, bench_record, raw_resp)."""
     logger.info(
@@ -258,9 +258,6 @@ def _process_batch(
     )
     prompt = render(
         "question_batch_extract.j2",
-        pdf_name=pdf_path.name,
-        batch_size=len(batch),
-        start_index=start_idx,
         questions=[b["text"] for b in batch],
     )
     resp_text = ""
@@ -271,11 +268,14 @@ def _process_batch(
         "batch_size": len(batch),
         "question_ids": [b["id"] for b in batch],
     }
+    model = f"{spec.model}@{spec.base_url}" if spec else ""
     try:
+        if spec is None:
+            raise RuntimeError("no ingestion LLM configured")
         response = _get_ingest_llm(spec).invoke(
             [SystemMessage(content=_SYSTEM_PROMPT), HumanMessage(content=prompt)]
         )
-        record["model"] = f"{spec.model}@{spec.base_url}"
+        record["model"] = model
         resp_text = response.content if hasattr(response, "content") else str(response)
         answer, explanation, topics = _parse_plain_response(resp_text)
         items: list[dict] = []
@@ -297,7 +297,7 @@ def _process_batch(
         record["status"] = "ok"
         return items, record, resp_text
     except Exception:
-        record["model"] = f"{spec.model}@{spec.base_url}"
+        record["model"] = model
         record["status"] = "failed"
         question_text, options = _split_question_block(batch[0]["text"])
         return [{
@@ -347,8 +347,7 @@ def process_one_pdf(
     if batch_size != 1:
         raise ValueError("question ingestion requires batch_size=1")
     specs = ingest_provider_specs()
-    if not specs:
-        raise RuntimeError("no ingestion LLM configured")
+    primary_spec = specs[0] if specs else None
     logger.info(
         "[document] %s prepared: %d question blocks, %d batches, output=%s",
         pdf_path.name,
@@ -388,15 +387,11 @@ def process_one_pdf(
             len(items or []),
         )
 
-    provider_index = 0
     for bn, s, e, batch in batches:
-        spec = specs[provider_index]
         items, record, _ = _process_batch(
-            pdf_path, stem, batch, bn, s, e, label, spec
+            pdf_path, stem, batch, bn, s, e, label, primary_spec
         )
         _commit(bn, items)
-        if items is None or record.get("status") == "failed":
-            provider_index = (provider_index + 1) % len(specs)
 
     processed = next_index if max_batches is None else min(next_index, batch_size * max_batches)
     logger.info(
@@ -477,6 +472,99 @@ def _store_questions(questions: list[dict]) -> None:
         logger.info(f"  DB commit OK: {len(questions)} question(s) persisted")
     finally:
         conn.close()
+
+
+def backfill_question_metadata(
+    limit: int | None = None,
+    provider_specs: list[LLMSpec] | None = None,
+    provider_index: int = 0,
+) -> dict:
+    """Fill answer metadata for rows whose extraction call previously failed."""
+    if not db.is_ready():
+        raise db.DatabaseNotReady(db.readiness_hint())
+    specs = provider_specs if provider_specs is not None else ingest_provider_specs()
+    if not specs:
+        raise RuntimeError("no ingestion LLM configured")
+    query = """
+        SELECT qid, question_text, options
+        FROM frm_questions
+        WHERE answer = '' OR explanation = '' OR cardinality(question_topics) = 0
+        ORDER BY qid
+    """
+    if limit is not None:
+        query += " LIMIT %s"
+
+    conn = db.connect()
+    processed = updated = failed = 0
+    updates: list[tuple] = []
+    topic_rows: list[tuple] = []
+    attempts: list[dict[str, str | int]] = []
+    try:
+        with conn.cursor() as cur:
+            cur.execute(query, (limit,) if limit is not None else ())
+            rows = cur.fetchall()
+            for row_index, (qid, question_text, options) in enumerate(rows):
+                processed += 1
+                spec = specs[(provider_index + row_index) % len(specs)]
+                model = f"{spec.model}@{spec.base_url}"
+                options = options or {}
+                option_text = "\n".join(f"{key}. {value}" for key, value in options.items())
+                prompt = render(
+                    "question_batch_extract.j2",
+                    questions=[f"{question_text}\n{option_text}"],
+                )
+                try:
+                    response = _get_ingest_llm(spec).invoke(
+                        [SystemMessage(content=_SYSTEM_PROMPT), HumanMessage(content=prompt)]
+                    )
+                    answer, explanation, topics = _parse_plain_response(
+                        response.content if hasattr(response, "content") else str(response)
+                    )
+                    if answer not in options:
+                        raise ValueError(f"LLM answer {answer!r} is not an option")
+                    updates.append((answer, explanation, topics, model, qid))
+                    topic_rows.extend(_topic_rows(qid, topics))
+                    attempts.append({"qid": qid, "provider": model, "status": "ok"})
+                except Exception as exc:
+                    failed += 1
+                    attempts.append(
+                        {
+                            "qid": qid,
+                            "provider": model,
+                            "status": f"failed: {type(exc).__name__}",
+                        }
+                    )
+
+            if updates:
+                cur.executemany(
+                    """
+                    UPDATE frm_questions
+                    SET answer = %s, explanation = %s, question_topics = %s,
+                        llm_model_used = %s
+                    WHERE qid = %s
+                    """,
+                    updates,
+                )
+                if topic_rows:
+                    cur.executemany(
+                        """
+                        INSERT INTO frm_question_topics (qid, topic, embedding)
+                        VALUES (%s, %s, %s::vector)
+                        ON CONFLICT (qid, topic) DO UPDATE SET embedding = EXCLUDED.embedding
+                        """,
+                        topic_rows,
+                    )
+                conn.commit()
+                updated = len(updates)
+    finally:
+        conn.close()
+    return {
+        "processed": processed,
+        "updated": updated,
+        "failed": failed,
+        "attempts": attempts,
+        "next_provider_index": (provider_index + processed) % len(specs),
+    }
 
 
 def ingest_questions(
@@ -678,23 +766,20 @@ def process_parsed_text_to_json(parsed_path: Path, batch_size: int = 1) -> dict:
     if batch_size != 1:
         raise ValueError("question ingestion requires batch_size=1")
     specs = ingest_provider_specs()
-    if not specs:
-        raise RuntimeError("no ingestion LLM configured")
+    spec = specs[0] if specs else None
+    model = f"{spec.model}@{spec.base_url}" if spec else ""
 
     all_results = []
-    provider_index = 0
     for i in range(0, total, batch_size):
         batch = questions[i : i + batch_size]
         logger.info(f"  Batch {i//batch_size + 1}: questions {i+1}-{min(i+batch_size,total)} ({len(batch)})")
         prompt = render(
             "question_batch_extract.j2",
-            pdf_name=pdf_name,
-            batch_size=len(batch),
-            start_index=i + 1,
             questions=batch,
         )
         try:
-            spec = specs[provider_index]
+            if spec is None:
+                raise RuntimeError("no ingestion LLM configured")
             response = _get_ingest_llm(spec).invoke(
                 [SystemMessage(content=_SYSTEM_PROMPT), HumanMessage(content=prompt)]
             )
@@ -709,7 +794,7 @@ def process_parsed_text_to_json(parsed_path: Path, batch_size: int = 1) -> dict:
                 "pdf_name": pdf_name,
                 "source_path": "",
                 "page_number": 0,
-                "llm_model_used": f"{spec.model}@{spec.base_url}",
+                "llm_model_used": model,
             })
             logger.info("    -> parsed 1 question")
         except Exception:
@@ -722,9 +807,8 @@ def process_parsed_text_to_json(parsed_path: Path, batch_size: int = 1) -> dict:
                 "pdf_name": pdf_name,
                 "source_path": "",
                 "page_number": 0,
-                "llm_model_used": f"{spec.model}@{spec.base_url}",
+                "llm_model_used": model,
             })
-            provider_index = (provider_index + 1) % len(specs)
             continue
 
     with open(out_path, "w", encoding="utf-8") as f:

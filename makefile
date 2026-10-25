@@ -12,8 +12,9 @@ TOPICS ?= ["Futures and Forwards", "Credit Risk", "Option Pricing"]
 SEARCH_TOPICS ?= []
 PAGE ?= 1
 PAGE_SIZE ?= 10
+BACKFILL_LIMIT ?= 3
 -include .env
-.PHONY: env deps db-setup reset ingest ingest-questions-json ingest-questions-store run stop mcq-answer retrieve questions health ui
+.PHONY: env deps db-setup reset ingest ingest-questions-json ingest-questions-store backfill-question-metadata schedule-backfill run stop mcq-answer retrieve questions health ui
 
 # Copy .env.example -> .env (never overwrite an existing .env)
 env:
@@ -49,6 +50,16 @@ ingest-questions-json:
 # Independently load successful question JSON files into frm_questions
 ingest-questions-store:
 	pipenv run python scripts/store_questions.py
+
+# Retry only rows whose answer, explanation, or topics are still empty.
+# Usage: make backfill-question-metadata [BACKFILL_LIMIT=3]
+backfill-question-metadata:
+	pipenv run python scripts/backfill_question_metadata.py --limit $(BACKFILL_LIMIT)
+
+# Run the backfill every five minutes, three questions per cycle, rotating
+# through the configured Groq, OpenRouter, and Gemini providers.
+schedule-backfill:
+	pipenv run python scripts/schedule_backfill.py
 
 # Start the Flask server (foreground; stops any stale server first)
 run: stop
