@@ -7,9 +7,11 @@ Run: make ui  (backend must be running first: make run)
 from __future__ import annotations
 
 import os
+import json
 
 import requests
 import streamlit as st
+import streamlit.components.v1 as components
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -268,9 +270,51 @@ def remember_answer(qid: int) -> None:
     st.session_state.answers[qid] = st.session_state.get(f"choice_{qid}")
 
 
+def copy_question_widget(q: dict) -> None:
+    text = f"{q['question_text']}\n\nOptions:\n" + "\n".join(
+        f"{label}. {option}" for label, option in q["options"].items()
+    )
+    safe_text = json.dumps(text).replace("<", "\\u003c").replace(">", "\\u003e")
+    components.html(
+        f"""
+        <button id="copy" title="Copy question and options" aria-label="Copy question and options">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="8" y="8" width="11" height="12" rx="1.5"></rect>
+            <path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v10A1.5 1.5 0 0 0 5.5 17H8"></path>
+          </svg>
+        </button>
+        <style>
+          body {{ margin: 0; display: flex; justify-content: flex-end; }}
+          button {{ border: 0; background: transparent; color: #64748b; cursor: pointer; padding: 5px; }}
+          button:hover {{ color: #0f172a; }}
+          svg {{ width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; }}
+        </style>
+        <script>
+          const button = document.getElementById("copy");
+          const icon = button.innerHTML;
+          button.onclick = async () => {{
+            try {{
+              await navigator.clipboard.writeText({safe_text});
+              button.textContent = "✓";
+              setTimeout(() => button.innerHTML = icon, 1200);
+            }} catch {{
+              button.textContent = "!";
+            }}
+          }};
+        </script>
+        """,
+        height=32,
+        scrolling=False,
+    )
+
+
 def render_question(q: dict) -> None:
     qid = q["qid"]
-    with st.expander(q["question_text"], expanded=True):
+    with st.expander(f"Question {qid}", expanded=True):
+        question_col, copy_col = st.columns([0.94, 0.06], vertical_alignment="top")
+        question_col.markdown(f"**{q['question_text']}**")
+        with copy_col:
+            copy_question_widget(q)
         st.session_state.setdefault("answers", {})
         st.session_state.setdefault(f"choice_{qid}", st.session_state.answers.get(qid))
         st.radio(
