@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 import time
+import traceback
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -13,6 +14,7 @@ from app.logging import setup_logging  # noqa: E402
 setup_logging()
 
 from app import db  # noqa: E402
+from app.config import config  # noqa: E402
 from app.ingestion.question_ingestion import backfill_question_metadata  # noqa: E402
 
 
@@ -21,7 +23,12 @@ BATCH_SIZE = 3
 
 
 def main() -> int:
-    print("Starting Gemini question metadata scheduler: 3 questions every 3 minutes")
+    print(
+        "Starting Gemini question metadata scheduler: "
+        f"3 questions every 3 minutes; key_configured={bool(config.GEMINI_API_KEY)}; "
+        f"model={config.GEMINI_MODEL}",
+        flush=True,
+    )
     try:
         while True:
             try:
@@ -43,6 +50,7 @@ def main() -> int:
                     )
             except Exception as exc:
                 print(f"Backfill cycle failed: {exc}")
+                traceback.print_exc()
             time.sleep(INTERVAL_SECONDS)
     except KeyboardInterrupt:
         print("Question metadata scheduler stopped")

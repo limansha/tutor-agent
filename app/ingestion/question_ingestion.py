@@ -516,11 +516,22 @@ def backfill_question_metadata(
                     attempts.append({"qid": qid, "provider": model, "status": "ok"})
                 except Exception as exc:
                     failed += 1
+                    response_error = getattr(exc, "response", None)
+                    detail = (
+                        getattr(exc, "body", None)
+                        or getattr(response_error, "text", None)
+                        or str(exc)
+                        or repr(exc)
+                    )
+                    detail = " ".join(str(detail).split())[:240]
+                    status_code = getattr(exc, "status_code", None)
+                    if status_code:
+                        detail = f"status={status_code} {detail}"
                     attempts.append(
                         {
                             "qid": qid,
                             "provider": model,
-                            "status": f"failed: {type(exc).__name__}",
+                            "status": f"failed: {type(exc).__name__}: {detail}",
                         }
                     )
 
