@@ -63,7 +63,7 @@ def health():
             "status": "ok" if ready else "degraded",
             "database_ready": ready,
             "database_url_set": bool(config.DATABASE_URL),
-            "llm_key_set": bool(config.GEMINI_API_KEY),
+            "llm_key_set": bool(config.OPENROUTER_API_KEY),
             "embedding_model": config.EMBEDDING_MODEL,
             "embedding_dim": config.EMBEDDING_DIM,
             "embedding_backend": "fastembed/onnxruntime",

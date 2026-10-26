@@ -21,8 +21,10 @@ class Config:
     MCQ_TEMPERATURE: float = float(os.getenv("MCQ_TEMPERATURE", "0.2"))
     MCQ_MAX_TOKENS: int = int(os.getenv("MCQ_MAX_TOKENS", "4000"))
 
-    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "").strip()
-    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip()
+    OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "").strip()
+    OPENROUTER_MODEL: str = os.getenv(
+        "OPENROUTER_MODEL", "nvidia/nemotron-3-ultra-550b-a55b:free"
+    ).strip()
 
     EMBEDDING_MODEL: str = os.getenv(
         "EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"

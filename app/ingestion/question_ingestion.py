@@ -11,7 +11,7 @@ from pypdf import PdfReader
 from app import db
 from app.config import config
 from app.embeddings import embed_documents
-from app.llm import gemini_spec, get_llm
+from app.llm import get_llm, openrouter_spec
 from app.prompts import render
 
 logger = logging.getLogger(__name__)
@@ -25,8 +25,8 @@ _SYSTEM_PROMPT = render(
 
 @lru_cache(maxsize=1)
 def _get_ingest_llm():
-    """Cache the Gemini client so batches reuse connections/TLS."""
-    return get_llm(gemini_spec(), purpose="ingest")
+    """Cache the OpenRouter client so batches reuse connections/TLS."""
+    return get_llm(openrouter_spec(), purpose="ingest")
 
 
 def _clean_text(text: str) -> str:
@@ -267,7 +267,7 @@ def _process_batch(
         "batch_size": len(batch),
         "question_ids": [b["id"] for b in batch],
     }
-    model = f"{config.GEMINI_MODEL}@gemini"
+    model = f"{config.OPENROUTER_MODEL}@openrouter"
     try:
         response = _get_ingest_llm().invoke(
             [SystemMessage(content=_SYSTEM_PROMPT), HumanMessage(content=prompt)]
@@ -495,7 +495,7 @@ def backfill_question_metadata(
             rows = cur.fetchall()
             for qid, question_text, options in rows:
                 processed += 1
-                model = f"{config.GEMINI_MODEL}@gemini"
+                model = f"{config.OPENROUTER_MODEL}@openrouter"
                 options = options or {}
                 option_text = "\n".join(f"{key}. {value}" for key, value in options.items())
                 prompt = render(
@@ -764,7 +764,7 @@ def process_parsed_text_to_json(parsed_path: Path, batch_size: int = 1) -> dict:
 
     if batch_size != 1:
         raise ValueError("question ingestion requires batch_size=1")
-    model = f"{config.GEMINI_MODEL}@gemini"
+    model = f"{config.OPENROUTER_MODEL}@openrouter"
 
     all_results = []
     for i in range(0, total, batch_size):

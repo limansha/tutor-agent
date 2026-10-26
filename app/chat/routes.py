@@ -36,7 +36,7 @@ def chat():
         return jsonify(
             ServiceUnavailable(
                 error=str(exc),
-                hint="Set GEMINI_API_KEY, then restart.",
+                hint="Set OPENROUTER_API_KEY, then restart.",
             ).model_dump()
         ), 503
 

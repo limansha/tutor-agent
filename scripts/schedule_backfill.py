@@ -1,4 +1,4 @@
-"""Run Gemini question metadata backfill every five minutes."""
+"""Run OpenRouter question metadata backfill every five minutes."""
 
 from __future__ import annotations
 
@@ -24,9 +24,9 @@ BATCH_SIZE = 3
 
 def main() -> int:
     print(
-        "Starting Gemini question metadata scheduler: "
-        f"3 questions every 5 minutes; key_configured={bool(config.GEMINI_API_KEY)}; "
-        f"model={config.GEMINI_MODEL}",
+        "Starting OpenRouter question metadata scheduler: "
+        f"3 questions every 5 minutes; key_configured={bool(config.OPENROUTER_API_KEY)}; "
+        f"model={config.OPENROUTER_MODEL}",
         flush=True,
     )
     try:

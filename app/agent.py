@@ -3,10 +3,10 @@
 The search runs once per request (keyless DDG-Lite scrape — see app/websearch.py),
 its excerpts are pasted into the prompt, and Python builds the MCQAnswer from
 a small plain-text response contract. Dropping `create_agent`/tools removes every
-tool-calling failure mode seen when switching models: Gemini's thought_signature
+tool-calling failure modes seen with provider-specific APIs.
 400 on the tool round-trip, gpt-oss mis-calling tool args, and the
 response_format + tool-calling conflict behind the old ToolStrategy workaround.
-The configured Gemini model handles the single LLM call."""
+The configured OpenRouter model handles the single LLM call."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from langchain_core.exceptions import OutputParserException
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.config import config
-from app.llm import LLMSpec, gemini_spec, get_llm
+from app.llm import LLMSpec, get_llm, openrouter_spec
 from app.prompts import render
 from app.schemas import ChunkMetadata, MCQAnswer, SourceChunk
 from app import websearch
@@ -144,10 +144,10 @@ def answer_mcq(
         time.monotonic() - t_search,
         len(sources),
     )
-    spec = gemini_spec()
+    spec = openrouter_spec()
     t_llm = time.monotonic()
     answer = _answer_once(spec, question, options, excerpts)
-    logger.info("mcq-answer: Gemini call took %.3fs", time.monotonic() - t_llm)
+    logger.info("mcq-answer: OpenRouter call took %.3fs", time.monotonic() - t_llm)
     logger.info(
         "mcq-answer: total took %.3fs, model=%s",
         time.monotonic() - t_total,

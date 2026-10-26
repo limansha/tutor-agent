@@ -5,7 +5,7 @@ from __future__ import annotations
 from langchain_openai import ChatOpenAI
 
 from app.config import config
-from app.llm.providers import LLMSpec, gemini_spec
+from app.llm.providers import LLMSpec, openrouter_spec
 
 
 def get_llm(
@@ -15,7 +15,7 @@ def get_llm(
 ):
     """Return a model-agnostic LangChain chat model for an OpenAI-compatible API.
 
-    An LLMSpec targets Gemini. If omitted, the configured Gemini model is used.
+    If omitted, the configured OpenRouter model is used.
     """
     if purpose == "ingest":
         temperature = config.INGEST_TEMPERATURE
@@ -28,7 +28,7 @@ def get_llm(
     else:
         raise ValueError(f"unknown LLM purpose: {purpose}")
 
-    spec = spec if isinstance(spec, LLMSpec) else gemini_spec()
+    spec = spec if isinstance(spec, LLMSpec) else openrouter_spec()
     return ChatOpenAI(
         model=spec.model,
         temperature=temperature,
