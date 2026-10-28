@@ -1,10 +1,13 @@
-"""POST /api/questions — fetch practice questions by requested topics.
+"""Question endpoints.
 
 `topics` are matched exactly against the stored question_topics array (GIN);
 `search_topics` are matched semantically (cosine over frm_question_topics
 embeddings) and only run when provided. Results are merged, deduped by qid and
 returned in batches of page_size. Requested topics with no hit are reported in
 uncovered_topics.
+
+GET /api/questions-metadata?filter=pdfs returns the distinct source PDF names. The
+filter parameter leaves room for adding other question metadata filters later.
 """
 
 from __future__ import annotations
@@ -58,6 +61,12 @@ _ALL_SQL = f"""
 """
 
 _COUNT_SQL = "SELECT count(*) FROM frm_questions"
+_PDF_NAMES_SQL = """
+    SELECT DISTINCT pdf_name
+    FROM frm_questions
+    WHERE btrim(pdf_name) <> ''
+    ORDER BY pdf_name
+"""
 
 
 def _emb_sql(vec: list[float]) -> str:
@@ -109,6 +118,40 @@ def _collect(cur, topics: list[str], search_topics: list[str], limit: int):
     match_type.update({t: "semantic" for t in sem_matched})
     uncovered = [t for t in dict.fromkeys([*topics, *search_topics]) if t not in match_type]
     return merged, match_type, uncovered
+
+
+@bp.get("/api/questions-metadata")
+def question_filters():
+    filter_name = request.args.get("filter", "")
+    if filter_name != "pdfs":
+        return jsonify({"error": "filter must be 'pdfs'"}), 400
+
+    if not db.is_ready():
+        return jsonify(
+            ServiceUnavailable(
+                error="database is not ready", hint=db.readiness_hint()
+            ).model_dump()
+        ), 503
+
+    try:
+        start = time.monotonic()
+        with db.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(_PDF_NAMES_SQL)
+                pdf_names = [row[0] for row in cur.fetchall()]
+    except db.DatabaseNotReady as exc:
+        return jsonify(
+            ServiceUnavailable(error=str(exc), hint=db.readiness_hint()).model_dump()
+        ), 503
+
+    return jsonify(
+        {
+            "filter": filter_name,
+            "pdf_names": pdf_names,
+            "total": len(pdf_names),
+            "elapsed_ms": int((time.monotonic() - start) * 1000),
+        }
+    ), 200
 
 
 @bp.post("/api/questions")

@@ -1,6 +1,7 @@
 """Streamlit UI: topic-scoped practice questions with stored explanations.
 
-Talks to the Flask API (POST /api/questions, POST /api/check-answer).
+Talks to the Flask API (GET /api/questions-metadata, POST /api/questions,
+POST /api/check-answer).
 Run: make ui  (backend must be running first: make run)
 """
 
@@ -266,6 +267,17 @@ def call(path: str, *, timeout: int = 180, **payload) -> dict:
     return body
 
 
+def call_get(path: str, *, timeout: int = 30, **params) -> dict:
+    resp = requests.get(f"{API_BASE}{path}", params=params, timeout=timeout)
+    try:
+        body = resp.json()
+    except ValueError:
+        raise RuntimeError(f"{resp.status_code} {resp.reason}: {resp.text[:300]}")
+    if resp.status_code != 200:
+        raise RuntimeError(body.get("error") or body.get("hint") or resp.text)
+    return body
+
+
 def remember_answer(qid: int) -> None:
     st.session_state.answers[qid] = st.session_state.get(f"choice_{qid}")
 
@@ -415,6 +427,31 @@ def main() -> None:
     st.session_state.setdefault("answers", {})
 
     with st.sidebar:
+        st.header("PDF sources")
+        refresh_pdf_names = st.button("Refresh PDF list", use_container_width=True)
+        if "pdf_names" not in st.session_state or refresh_pdf_names:
+            try:
+                st.session_state.pdf_names = call_get(
+                    "/api/questions-metadata", filter="pdfs"
+                ).get("pdf_names", [])
+                st.session_state.pdf_names_error = None
+            except Exception as exc:
+                st.session_state.pdf_names = []
+                st.session_state.pdf_names_error = str(exc)
+
+        pdf_names = st.session_state.get("pdf_names", [])
+        pdf_names_error = st.session_state.get("pdf_names_error")
+        if pdf_names_error:
+            st.error(f"Failed to load PDF names: {pdf_names_error}")
+        else:
+            st.caption(f"{len(pdf_names)} PDF source(s) available")
+            with st.expander("Show PDF names", expanded=False):
+                if pdf_names:
+                    for pdf_name in pdf_names:
+                        st.caption(pdf_name)
+                else:
+                    st.info("No PDF names found.")
+
         st.header("Topics")
         all_topics = st.checkbox("All topics", key="topic_all", value=False)
         st.caption("One click adds a whole group (click again to add more):")
