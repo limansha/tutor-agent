@@ -498,17 +498,20 @@ def main() -> None:
 
         st.header("Topics")
         all_topics = st.checkbox("All topics", key="topic_all", value=False)
-        st.caption("One click adds a whole group (click again to add more):")
-        group_cols = st.columns(2)
-        for i, (gname, gtopics) in enumerate(TOPIC_GROUPS.items()):
-            if group_cols[i % 2].button(
-                f"{gname} ({len(gtopics)})",
-                key=f"group_{i}",
+        with st.expander("Topic presets", expanded=False):
+            preset_names = ["Select a group..."] + list(TOPIC_GROUPS)
+            preset = st.selectbox(
+                "Add a topic group",
+                options=preset_names,
                 disabled=all_topics,
-                use_container_width=True,
-            ):
-                cur = st.session_state.get("topic_pick") or []
-                st.session_state.topic_pick = list(dict.fromkeys(cur + gtopics))
+                label_visibility="collapsed",
+            )
+            if st.button("Add group", disabled=all_topics, use_container_width=True):
+                if preset != preset_names[0]:
+                    cur = st.session_state.get("topic_pick") or []
+                    st.session_state.topic_pick = list(
+                        dict.fromkeys(cur + TOPIC_GROUPS[preset])
+                    )
         picked = st.multiselect(
             "Topics (type to filter)",
             options=TOPICS,
