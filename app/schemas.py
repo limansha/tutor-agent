@@ -142,9 +142,17 @@ class QuestionsRequest(BaseModel):
         default_factory=list,
         description="Topics to match semantically; only runs when non-empty.",
     )
+    attempted: bool = Field(
+        default=False,
+        description="Return attempted questions when true; unattempted questions otherwise.",
+    )
     page_number: int = Field(default=1, ge=1, description="1-based batch number.")
     page_size: int = Field(default=100, ge=1, le=100,
                            description="Questions per batch (max 100).")
+
+
+class QuestionPreferenceRequest(BaseModel):
+    show_attempted: bool = False
 
 
 class Question(BaseModel):

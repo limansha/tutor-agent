@@ -79,3 +79,24 @@ CREATE INDEX IF NOT EXISTS frm_questions_source_path_idx ON frm_questions (sourc
 CREATE INDEX IF NOT EXISTS frm_questions_question_topics_idx ON frm_questions USING GIN (question_topics);
 CREATE UNIQUE INDEX IF NOT EXISTS frm_questions_question_text_uidx
     ON frm_questions (question_text);
+
+-- Single-user question progress. A row means the question was attempted.
+CREATE TABLE IF NOT EXISTS frm_question_progress (
+    qid                 BIGINT PRIMARY KEY REFERENCES frm_questions(qid) ON DELETE CASCADE,
+    attempt_count       INT NOT NULL DEFAULT 1,
+    last_answer         TEXT NOT NULL,
+    last_is_correct     BOOLEAN NOT NULL,
+    first_attempted_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_attempted_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Single-user UI preference. The frontend never provides a user identity.
+CREATE TABLE IF NOT EXISTS frm_question_preferences (
+    preference_key TEXT PRIMARY KEY,
+    show_attempted BOOLEAN NOT NULL DEFAULT FALSE,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+INSERT INTO frm_question_preferences (preference_key)
+VALUES ('student-1')
+ON CONFLICT (preference_key) DO NOTHING;

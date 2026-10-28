@@ -278,6 +278,17 @@ def call_get(path: str, *, timeout: int = 30, **params) -> dict:
     return body
 
 
+def call_put(path: str, *, timeout: int = 30, **payload) -> dict:
+    resp = requests.put(f"{API_BASE}{path}", json=payload, timeout=timeout)
+    try:
+        body = resp.json()
+    except ValueError:
+        raise RuntimeError(f"{resp.status_code} {resp.reason}: {resp.text[:300]}")
+    if resp.status_code != 200:
+        raise RuntimeError(body.get("error") or body.get("hint") or resp.text)
+    return body
+
+
 def remember_answer(qid: int) -> None:
     st.session_state.answers[qid] = st.session_state.get(f"choice_{qid}")
 
@@ -427,6 +438,41 @@ def main() -> None:
     st.session_state.setdefault("answers", {})
 
     with st.sidebar:
+        if "show_attempted" not in st.session_state:
+            try:
+                st.session_state.show_attempted = call_get(
+                    "/api/question-preferences"
+                ).get("show_attempted", False)
+                st.session_state.question_preference_error = None
+            except Exception as exc:
+                st.session_state.show_attempted = False
+                st.session_state.question_preference_error = str(exc)
+            st.session_state.saved_show_attempted = st.session_state.show_attempted
+        st.session_state.setdefault(
+            "saved_show_attempted", st.session_state.show_attempted
+        )
+
+        show_attempted = st.toggle(
+            "Show attempted questions",
+            key="show_attempted",
+            help="Off shows unattempted questions; on shows attempted questions.",
+        )
+        if show_attempted != st.session_state.saved_show_attempted:
+            try:
+                call_put(
+                    "/api/question-preferences",
+                    show_attempted=show_attempted,
+                )
+                st.session_state.saved_show_attempted = show_attempted
+                st.session_state.question_preference_error = None
+            except Exception as exc:
+                st.session_state.question_preference_error = str(exc)
+        if st.session_state.get("question_preference_error"):
+            st.warning(
+                "Preference could not be saved: "
+                + st.session_state.question_preference_error
+            )
+
         st.header("PDF sources")
         refresh_pdf_names = st.button("Refresh PDF list", use_container_width=True)
         if "pdf_names" not in st.session_state or refresh_pdf_names:
@@ -493,6 +539,7 @@ def main() -> None:
                     "/api/questions",
                     pdf_names=selected_pdf_names,
                     topics=checked,
+                    attempted=show_attempted,
                     page_number=1,
                     page_size=page_size,
                 )
@@ -504,6 +551,7 @@ def main() -> None:
                 st.session_state.has_more = data.get("has_more", False)
                 st.session_state.fetch_topics = checked
                 st.session_state.fetch_pdf_names = selected_pdf_names
+                st.session_state.fetch_attempted = show_attempted
                 st.session_state.page = 0
                 st.session_state.checks = {}
                 st.session_state.explanations = {}
@@ -551,6 +599,7 @@ def main() -> None:
                     "/api/questions",
                     pdf_names=st.session_state.get("fetch_pdf_names", []),
                     topics=st.session_state.get("fetch_topics", []),
+                    attempted=st.session_state.get("fetch_attempted", False),
                     page_number=st.session_state.server_page + 1,
                     page_size=page_size,
                 )

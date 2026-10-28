@@ -12,9 +12,10 @@ TOPICS ?= ["Futures and Forwards", "Credit Risk", "Option Pricing"]
 SEARCH_TOPICS ?= []
 PAGE ?= 1
 PAGE_SIZE ?= 10
+ATTEMPTED ?= false
 BACKFILL_LIMIT ?= 3
 -include .env
-.PHONY: env deps db-setup reset ingest ingest-questions-json ingest-questions-store backfill-question-metadata schedule-backfill run stop mcq-answer retrieve questions health ui
+.PHONY: env deps db-setup db-update reset ingest ingest-questions-json ingest-questions-store backfill-question-metadata schedule-backfill run stop mcq-answer retrieve questions health ui
 
 # Copy .env.example -> .env (never overwrite an existing .env)
 env:
@@ -32,6 +33,11 @@ r:
 # Create the pgvector schema (frm_books + question tables) using DATABASE_URL
 db-setup:
 	pipenv run python scripts/db_setup.py
+
+# Apply incremental database changes to an existing database.
+# Usage: PIPENV_DONT_LOAD_ENV=1 make db-update DATABASE_URL=<render-external-url>
+db-update:
+	PIPENV_DONT_LOAD_ENV=1 pipenv run python scripts/db_update.py
 
 # Drop the frm_books table and re-apply the schema (start fresh)
 reset:
@@ -82,11 +88,11 @@ retrieve:
 		-d "{\"query\": \"$(QUERY)\"}" | pipenv run python -m json.tool
 
 # Topic-scoped questions against a running server
-# (override: TOPICS='["Futures","VaR"]' SEARCH_TOPICS='["duration"]' PAGE=2 PAGE_SIZE=15)
+# (override: TOPICS='["Futures","VaR"]' SEARCH_TOPICS='["duration"]' ATTEMPTED=true PAGE=2 PAGE_SIZE=15)
 questions:
 	@curl -s -X POST http://127.0.0.1:5000/api/questions \
 		-H 'Content-Type: application/json' \
-		-d '{"topics": $(TOPICS), "search_topics": $(SEARCH_TOPICS), "page_number": $(PAGE), "page_size": $(PAGE_SIZE)}' | pipenv run python -m json.tool
+		-d '{"topics": $(TOPICS), "search_topics": $(SEARCH_TOPICS), "attempted": $(ATTEMPTED), "page_number": $(PAGE), "page_size": $(PAGE_SIZE)}' | pipenv run python -m json.tool
 
 # Readiness check
 health:

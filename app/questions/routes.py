@@ -25,6 +25,7 @@ from app.schemas import (
     AnswerCheckResponse,
     AnswerCheckResult,
     QuestionsRequest,
+    QuestionPreferenceRequest,
     QuestionsResponse,
     ServiceUnavailable,
     TopicMatch,
@@ -32,6 +33,7 @@ from app.schemas import (
 )
 
 bp = Blueprint("questions", __name__)
+_PREFERENCE_KEY = "student-1"
 
 _Q_COLS = (
     "qid", "question_text", "options", "answer", "explanation",
@@ -55,7 +57,6 @@ _ALL_SQL = f"""
     FROM frm_questions
 """
 
-_COUNT_SQL = "SELECT count(*) FROM frm_questions"
 _PDF_NAMES_SQL = """
     SELECT DISTINCT pdf_name
     FROM frm_questions
@@ -68,8 +69,13 @@ def _emb_sql(vec: list[float]) -> str:
     return f"[{','.join(f'{x:.6f}' for x in vec)}]"
 
 
+def _progress_condition(qid: str, attempted: bool) -> str:
+    exists = "EXISTS" if attempted else "NOT EXISTS"
+    return f" AND {exists} (SELECT 1 FROM frm_question_progress p WHERE p.qid = {qid})"
+
+
 def _exact_rows(
-    cur, topics: list[str], pdf_names: list[str]
+    cur, topics: list[str], pdf_names: list[str], attempted: bool
 ) -> tuple[list[dict], set[str]]:
     """Rows whose question_topics literally contain a requested topic (GIN)."""
     if not topics:
@@ -79,6 +85,7 @@ def _exact_rows(
     if pdf_names:
         sql += " AND pdf_name = ANY(%s)"
         params.append(pdf_names)
+    sql += _progress_condition("frm_questions.qid", attempted)
     sql += " ORDER BY qid"
     cur.execute(sql, params)
     rows = [dict(zip(_Q_COLS, row)) for row in cur.fetchall()]
@@ -87,7 +94,7 @@ def _exact_rows(
 
 
 def _semantic_rows(
-    cur, topics: list[str], pdf_names: list[str], limit: int
+    cur, topics: list[str], pdf_names: list[str], attempted: bool, limit: int
 ) -> tuple[list[dict], set[str]]:
     """Rows whose stored topic embedding is near a requested search topic."""
     if not topics:
@@ -100,6 +107,9 @@ def _semantic_rows(
         if pdf_names:
             sql += " WHERE q.pdf_name = ANY(%s)"
             params.append(pdf_names)
+        else:
+            sql += " WHERE TRUE"
+        sql += _progress_condition("q.qid", attempted)
         sql += " ORDER BY qt.embedding <=> %s::vector LIMIT %s"
         params.extend([_emb_sql(vec), limit])
         cur.execute(sql, params)
@@ -119,11 +129,14 @@ def _collect(
     topics: list[str],
     search_topics: list[str],
     pdf_names: list[str],
+    attempted: bool,
     limit: int,
 ):
     """Merge exact + semantic matches, dedup by qid, report matched/uncovered topics."""
-    exact_rows, exact_matched = _exact_rows(cur, topics, pdf_names)
-    sem_rows, sem_matched = _semantic_rows(cur, search_topics, pdf_names, limit)
+    exact_rows, exact_matched = _exact_rows(cur, topics, pdf_names, attempted)
+    sem_rows, sem_matched = _semantic_rows(
+        cur, search_topics, pdf_names, attempted, limit
+    )
 
     seen: set[int] = set()
     merged: list[dict] = []
@@ -172,6 +185,71 @@ def question_filters():
     ), 200
 
 
+@bp.get("/api/question-preferences")
+def get_question_preferences():
+    if not db.is_ready():
+        return jsonify(
+            ServiceUnavailable(
+                error="database is not ready", hint=db.readiness_hint()
+            ).model_dump()
+        ), 503
+
+    try:
+        with db.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT show_attempted
+                    FROM frm_question_preferences
+                    WHERE preference_key = %s
+                    """,
+                    (_PREFERENCE_KEY,),
+                )
+                row = cur.fetchone()
+    except db.DatabaseNotReady as exc:
+        return jsonify(
+            ServiceUnavailable(error=str(exc), hint=db.readiness_hint()).model_dump()
+        ), 503
+
+    return jsonify({"show_attempted": bool(row[0]) if row else False}), 200
+
+
+@bp.put("/api/question-preferences")
+def update_question_preferences():
+    try:
+        body = QuestionPreferenceRequest.model_validate(request.get_json(force=True))
+    except ValidationError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    if not db.is_ready():
+        return jsonify(
+            ServiceUnavailable(
+                error="database is not ready", hint=db.readiness_hint()
+            ).model_dump()
+        ), 503
+
+    try:
+        with db.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO frm_question_preferences
+                        (preference_key, show_attempted)
+                    VALUES (%s, %s)
+                    ON CONFLICT (preference_key) DO UPDATE SET
+                        show_attempted = EXCLUDED.show_attempted,
+                        updated_at = now()
+                    """,
+                    (_PREFERENCE_KEY, body.show_attempted),
+                )
+    except db.DatabaseNotReady as exc:
+        return jsonify(
+            ServiceUnavailable(error=str(exc), hint=db.readiness_hint()).model_dump()
+        ), 503
+
+    return jsonify({"show_attempted": body.show_attempted}), 200
+
+
 @bp.post("/api/questions")
 def questions():
     try:
@@ -198,6 +276,7 @@ def questions():
                         body.topics,
                         body.search_topics,
                         body.pdf_names,
+                        body.attempted,
                         body.page_size,
                     )
                     total = len(merged)
@@ -211,17 +290,21 @@ def questions():
                     if body.pdf_names:
                         sql += " WHERE pdf_name = ANY(%s)"
                         params.append(body.pdf_names)
+                    else:
+                        sql += " WHERE TRUE"
+                    sql += _progress_condition("frm_questions.qid", body.attempted)
                     sql += " ORDER BY qid LIMIT %s OFFSET %s"
                     params.extend([body.page_size, offset])
+                    count_sql = "SELECT count(*) FROM frm_questions"
+                    count_params: list[object] = []
                     if body.pdf_names:
-                        cur.execute(
-                            "SELECT count(*) FROM frm_questions WHERE pdf_name = ANY(%s)",
-                            (body.pdf_names,),
-                        )
-                        total = cur.fetchone()[0]
+                        count_sql += " WHERE pdf_name = ANY(%s)"
+                        count_params.append(body.pdf_names)
                     else:
-                        cur.execute(_COUNT_SQL)
-                        total = cur.fetchone()[0]
+                        count_sql += " WHERE TRUE"
+                    count_sql += _progress_condition("frm_questions.qid", body.attempted)
+                    cur.execute(count_sql, count_params)
+                    total = cur.fetchone()[0]
                     cur.execute(sql, params)
                     selected = [dict(zip(_Q_COLS, row)) for row in cur.fetchall()]
                     match_type, uncovered = {}, []
@@ -295,6 +378,29 @@ def check_answer():
                     qid: (answer, explanation or "")
                     for qid, answer, explanation in cur.fetchall()
                 }
+                progress_rows = [
+                    (
+                        item.qid,
+                        item.answer,
+                        _is_correct(item.answer, correct_by_qid[item.qid][0]),
+                    )
+                    for item in body.answers
+                    if item.answer is not None and item.qid in correct_by_qid
+                ]
+                if progress_rows:
+                    cur.executemany(
+                        """
+                        INSERT INTO frm_question_progress
+                            (qid, attempt_count, last_answer, last_is_correct)
+                        VALUES (%s, 1, %s, %s)
+                        ON CONFLICT (qid) DO UPDATE SET
+                            attempt_count = frm_question_progress.attempt_count + 1,
+                            last_answer = EXCLUDED.last_answer,
+                            last_is_correct = EXCLUDED.last_is_correct,
+                            last_attempted_at = now()
+                        """,
+                        progress_rows,
+                    )
     except db.DatabaseNotReady as exc:
         return jsonify(
             ServiceUnavailable(error=str(exc), hint=db.readiness_hint()).model_dump()
