@@ -474,8 +474,7 @@ def main() -> None:
             )
 
         st.header("PDF sources")
-        refresh_pdf_names = st.button("Refresh PDF list", use_container_width=True)
-        if "pdf_names" not in st.session_state or refresh_pdf_names:
+        if "pdf_names" not in st.session_state:
             try:
                 st.session_state.pdf_names = call_get(
                     "/api/questions-metadata", filter="pdfs"
@@ -491,13 +490,6 @@ def main() -> None:
         if pdf_names_error:
             st.error(f"Failed to load PDF names: {pdf_names_error}")
         else:
-            st.caption(f"{len(pdf_names)} PDF source(s) available")
-            with st.expander("Show PDF names", expanded=False):
-                if pdf_names:
-                    for pdf_name in pdf_names:
-                        st.caption(pdf_name)
-                else:
-                    st.info("No PDF names found.")
             selected_pdf_names = st.multiselect(
                 "PDF sources for questions",
                 options=pdf_names,
@@ -517,9 +509,6 @@ def main() -> None:
             ):
                 cur = st.session_state.get("topic_pick") or []
                 st.session_state.topic_pick = list(dict.fromkeys(cur + gtopics))
-        if st.button("Clear selection", key="group_clear", disabled=all_topics,
-                     use_container_width=True):
-            st.session_state.topic_pick = []
         picked = st.multiselect(
             "Topics (type to filter)",
             options=TOPICS,
