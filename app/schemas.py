@@ -130,6 +130,10 @@ class ServiceUnavailable(BaseModel):
 # Questions (fetch by requested topics with exact-first/semantic-fallback)
 # ---------------------------------------------------------------------------
 class QuestionsRequest(BaseModel):
+    pdf_names: list[str] = Field(
+        default_factory=list,
+        description="Source PDF names to restrict questions to; empty means all PDFs.",
+    )
     topics: list[str] = Field(
         default_factory=list,
         description="Exact topic tags to match against question_topics (GIN).",

@@ -441,6 +441,7 @@ def main() -> None:
 
         pdf_names = st.session_state.get("pdf_names", [])
         pdf_names_error = st.session_state.get("pdf_names_error")
+        selected_pdf_names = []
         if pdf_names_error:
             st.error(f"Failed to load PDF names: {pdf_names_error}")
         else:
@@ -451,6 +452,11 @@ def main() -> None:
                         st.caption(pdf_name)
                 else:
                     st.info("No PDF names found.")
+            selected_pdf_names = st.multiselect(
+                "PDF sources for questions",
+                options=pdf_names,
+                help="Leave empty to search all PDF sources.",
+            )
 
         st.header("Topics")
         all_topics = st.checkbox("All topics", key="topic_all", value=False)
@@ -479,11 +485,17 @@ def main() -> None:
         fetch_btn = st.button("Fetch questions", type="primary", use_container_width=True)
 
     if fetch_btn:
-        if not all_topics and not checked:
-            st.error("Select at least one topic.")
+        if not all_topics and not checked and not selected_pdf_names:
+            st.error("Select at least one topic or PDF source.")
         else:
             try:
-                data = call("/api/questions", topics=checked, page_number=1, page_size=page_size)
+                data = call(
+                    "/api/questions",
+                    pdf_names=selected_pdf_names,
+                    topics=checked,
+                    page_number=1,
+                    page_size=page_size,
+                )
             except Exception as exc:
                 st.error(f"Failed to fetch questions: {exc}")
             else:
@@ -491,6 +503,7 @@ def main() -> None:
                 st.session_state.server_page = 1
                 st.session_state.has_more = data.get("has_more", False)
                 st.session_state.fetch_topics = checked
+                st.session_state.fetch_pdf_names = selected_pdf_names
                 st.session_state.page = 0
                 st.session_state.checks = {}
                 st.session_state.explanations = {}
@@ -536,6 +549,7 @@ def main() -> None:
             with st.spinner("Fetching more questions..."):
                 data = call(
                     "/api/questions",
+                    pdf_names=st.session_state.get("fetch_pdf_names", []),
                     topics=st.session_state.get("fetch_topics", []),
                     page_number=st.session_state.server_page + 1,
                     page_size=page_size,

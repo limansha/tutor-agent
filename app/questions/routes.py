@@ -42,22 +42,17 @@ _EXACT_SQL = f"""
     SELECT {", ".join(_Q_COLS)}
     FROM frm_questions
     WHERE question_topics && %s::text[]
-    ORDER BY qid
 """
 
 _SEMANTIC_SQL = f"""
     SELECT {", ".join(_Q_COLS)}, 1 - (qt.embedding <=> %s::vector) AS score
     FROM frm_question_topics qt
     JOIN frm_questions q USING (qid)
-    ORDER BY qt.embedding <=> %s::vector
-    LIMIT %s
 """
 
 _ALL_SQL = f"""
     SELECT {", ".join(_Q_COLS)}
     FROM frm_questions
-    ORDER BY qid
-    LIMIT %s OFFSET %s
 """
 
 _COUNT_SQL = "SELECT count(*) FROM frm_questions"
@@ -73,24 +68,41 @@ def _emb_sql(vec: list[float]) -> str:
     return f"[{','.join(f'{x:.6f}' for x in vec)}]"
 
 
-def _exact_rows(cur, topics: list[str]) -> tuple[list[dict], set[str]]:
+def _exact_rows(
+    cur, topics: list[str], pdf_names: list[str]
+) -> tuple[list[dict], set[str]]:
     """Rows whose question_topics literally contain a requested topic (GIN)."""
     if not topics:
         return [], set()
-    cur.execute(_EXACT_SQL, (topics,))
+    sql = _EXACT_SQL
+    params: list[object] = [topics]
+    if pdf_names:
+        sql += " AND pdf_name = ANY(%s)"
+        params.append(pdf_names)
+    sql += " ORDER BY qid"
+    cur.execute(sql, params)
     rows = [dict(zip(_Q_COLS, row)) for row in cur.fetchall()]
     matched = {t for row in rows for t in row["question_topics"] if t in topics}
     return rows, matched
 
 
-def _semantic_rows(cur, topics: list[str], limit: int) -> tuple[list[dict], set[str]]:
+def _semantic_rows(
+    cur, topics: list[str], pdf_names: list[str], limit: int
+) -> tuple[list[dict], set[str]]:
     """Rows whose stored topic embedding is near a requested search topic."""
     if not topics:
         return [], set()
     rows: list[dict] = []
     matched: set[str] = set()
     for topic, vec in zip(topics, embed_documents(topics)):
-        cur.execute(_SEMANTIC_SQL, (_emb_sql(vec), _emb_sql(vec), limit))
+        sql = _SEMANTIC_SQL
+        params: list[object] = [_emb_sql(vec)]
+        if pdf_names:
+            sql += " WHERE q.pdf_name = ANY(%s)"
+            params.append(pdf_names)
+        sql += " ORDER BY qt.embedding <=> %s::vector LIMIT %s"
+        params.extend([_emb_sql(vec), limit])
+        cur.execute(sql, params)
         hits = []
         for row in cur.fetchall():
             d = dict(zip(_Q_COLS + ("score",), row))
@@ -102,10 +114,16 @@ def _semantic_rows(cur, topics: list[str], limit: int) -> tuple[list[dict], set[
     return rows, matched
 
 
-def _collect(cur, topics: list[str], search_topics: list[str], limit: int):
+def _collect(
+    cur,
+    topics: list[str],
+    search_topics: list[str],
+    pdf_names: list[str],
+    limit: int,
+):
     """Merge exact + semantic matches, dedup by qid, report matched/uncovered topics."""
-    exact_rows, exact_matched = _exact_rows(cur, topics)
-    sem_rows, sem_matched = _semantic_rows(cur, search_topics, limit)
+    exact_rows, exact_matched = _exact_rows(cur, topics, pdf_names)
+    sem_rows, sem_matched = _semantic_rows(cur, search_topics, pdf_names, limit)
 
     seen: set[int] = set()
     merged: list[dict] = []
@@ -176,7 +194,11 @@ def questions():
             with conn.cursor() as cur:
                 if topic_mode:
                     merged, match_type, uncovered = _collect(
-                        cur, body.topics, body.search_topics, body.page_size
+                        cur,
+                        body.topics,
+                        body.search_topics,
+                        body.pdf_names,
+                        body.page_size,
                     )
                     total = len(merged)
                     selected = merged[offset : offset + body.page_size]
@@ -184,9 +206,23 @@ def questions():
                     # topic, so semantic matches beyond that cap never appear;
                     # switch to ORDER BY score OFFSET if deeper paging matters.
                 else:  # no topics = every question in the DB, SQL-paginated
-                    cur.execute(_COUNT_SQL)
-                    total = cur.fetchone()[0]
-                    cur.execute(_ALL_SQL, (body.page_size, offset))
+                    sql = _ALL_SQL
+                    params: list[object] = []
+                    if body.pdf_names:
+                        sql += " WHERE pdf_name = ANY(%s)"
+                        params.append(body.pdf_names)
+                    sql += " ORDER BY qid LIMIT %s OFFSET %s"
+                    params.extend([body.page_size, offset])
+                    if body.pdf_names:
+                        cur.execute(
+                            "SELECT count(*) FROM frm_questions WHERE pdf_name = ANY(%s)",
+                            (body.pdf_names,),
+                        )
+                        total = cur.fetchone()[0]
+                    else:
+                        cur.execute(_COUNT_SQL)
+                        total = cur.fetchone()[0]
+                    cur.execute(sql, params)
                     selected = [dict(zip(_Q_COLS, row)) for row in cur.fetchall()]
                     match_type, uncovered = {}, []
     except db.DatabaseNotReady as exc:
