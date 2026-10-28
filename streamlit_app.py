@@ -498,7 +498,7 @@ def main() -> None:
 
         st.header("Topics")
         all_topics = st.checkbox("All topics", key="topic_all", value=False)
-        with st.expander("Topic presets", expanded=False):
+        with st.expander("Quick topic groups", expanded=False):
             preset_names = ["Select a group..."] + list(TOPIC_GROUPS)
             preset = st.selectbox(
                 "Add a topic group",
