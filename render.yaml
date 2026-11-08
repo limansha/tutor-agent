@@ -41,9 +41,6 @@ services:
     envVars:
       - key: RUN_COMBINED
         value: "1"
-      # Paid always-on service also runs the three-question backfill every five minutes.
-      - key: RUN_BACKFILL_SCHEDULER
-        value: "1"
       - key: DATABASE_URL
         fromDatabase:
           name: tutor-agent-db
@@ -52,7 +49,7 @@ services:
         value: /books
       - key: QUESTIONS_DIR
         value: /books
-      # Prompted at sync time; required for MCQ answers and backfill.
+      # Prompted at sync time; required for MCQ answers.
       - key: GEMINI_API_KEY
         sync: false
       - key: MCQ_TEMPERATURE
