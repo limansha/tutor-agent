@@ -31,6 +31,8 @@ questions/*
 
 # local-only agent notes
 AGENTS.md
+.agents/
+skills-lock.json
 
 # local-only self-check scripts (assert-based, run by hand: python test_*.py)
 test_*.py

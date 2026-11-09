@@ -240,14 +240,12 @@ def _write_json_atomic(path: Path, data: list) -> None:
 
 def _process_batch(
     pdf_path: Path,
-    stem: str,
     batch: list[dict],
     batch_num: int,
     start_idx: int,
     end_idx: int,
-    label: str,
-) -> tuple[list[dict] | None, dict, str]:
-    """Run one batch through the LLM. Returns (items, bench_record, raw_resp)."""
+) -> list[dict]:
+    """Run one batch through the LLM and return its question records."""
     logger.info(
         "[document] %s batch %d START (questions %d-%d)",
         pdf_path.name,
@@ -259,22 +257,13 @@ def _process_batch(
         "question_batch_extract.j2",
         questions=[b["text"] for b in batch],
     )
-    resp_text = ""
-    record = {
-        "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "stem": stem,
-        "batch_num": batch_num,
-        "batch_size": len(batch),
-        "question_ids": [b["id"] for b in batch],
-    }
     model = f"{config.OPENROUTER_MODEL}@openrouter"
     try:
         response = _get_ingest_llm().invoke(
             [SystemMessage(content=_SYSTEM_PROMPT), HumanMessage(content=prompt)]
         )
-        record["model"] = model
-        resp_text = response.content if hasattr(response, "content") else str(response)
-        answer, explanation, topics = _parse_plain_response(resp_text)
+        response_text = response.content if hasattr(response, "content") else str(response)
+        answer, explanation, topics = _parse_plain_response(response_text)
         items: list[dict] = []
         block = batch[0]
         question_text, options = _split_question_block(block["text"])
@@ -289,13 +278,10 @@ def _process_batch(
             "pdf_name": pdf_path.name,
             "source_path": str(pdf_path),
             "page_number": block.get("page_number", 0),
-            "llm_model_used": record["model"],
+            "llm_model_used": model,
         })
-        record["status"] = "ok"
-        return items, record, resp_text
+        return items
     except Exception:
-        record["model"] = model
-        record["status"] = "failed"
         question_text, options = _split_question_block(batch[0]["text"])
         return [{
             "question_text": question_text,
@@ -306,15 +292,14 @@ def _process_batch(
             "pdf_name": pdf_path.name,
             "source_path": str(pdf_path),
             "page_number": batch[0].get("page_number", 0),
-            "llm_model_used": record["model"],
-        }], record, resp_text
+            "llm_model_used": model,
+        }]
 
 
 def process_one_pdf(
     pdf_path: Path,
     batch_size: int = 1,
     force: bool = False,
-    label: str = "",
     max_batches: int | None = None,
 ) -> dict:
     pdf_path = Path(pdf_path)
@@ -383,9 +368,7 @@ def process_one_pdf(
         )
 
     for bn, s, e, batch in batches:
-        items, record, _ = _process_batch(
-            pdf_path, stem, batch, bn, s, e, label
-        )
+        items = _process_batch(pdf_path, batch, bn, s, e)
         _commit(bn, items)
 
     processed = next_index if max_batches is None else min(next_index, batch_size * max_batches)
