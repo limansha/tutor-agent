@@ -20,7 +20,10 @@ questions_dump/
 *.pdf
 
 # Render database recovery is local-only: never commit scripts or dumps.
-scripts/render_db/
+scripts/render_db/*
+!scripts/render_db/README.md
+!scripts/render_db/backup.py
+!scripts/render_db/restore.py
 render_db_dumps/
 
 # docker compose PDF mounts (keep the dirs, ignore their contents)
